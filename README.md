@@ -96,7 +96,8 @@ try to match it to a node type definition.
 f(b)arc finds additional nodes in the graph for a node. For example, for a Page it may find the
 Album nodes. The `--levels` parameter will determine the number of levels of nodes that are retrieved,
 with the default being 1 (i.e., the graph for just the node that was requested). Each additional node
-graph is returned separately.
+graph is returned separately. Use the `--exclude` parameter to exclude node type definitions from recursive
+retrieval.
 
 Note that f(b)arc may need to make multiple requests to retrieve the entire node graph so executing the
 graph command may take some time.

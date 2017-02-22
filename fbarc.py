@@ -28,7 +28,6 @@ else:
     # Python 3
     get_input = input
 
-
 GRAPH_URL = "https://graph.facebook.com"
 
 log = logging.getLogger(__name__)
@@ -153,7 +152,8 @@ def main():
             if node_type_definition_name == 'discover':
                 node_type_definition_name = fb.discover_type(args.node)
 
-            print_graphs(fb.get_nodes(args.node, node_type_definition_name, args.levels), pretty=args.pretty)
+            print_graphs(fb.get_nodes(args.node, node_type_definition_name, levels=args.levels,
+                                      exclude_node_type_definition_names=args.exclude), pretty=args.pretty)
 
 
 def print_graph(graph, pretty=False):
@@ -200,6 +200,8 @@ def get_argparser():
     graph_parser.add_argument('node', help='identify node to retrieve by providing node id, username, or Facebook URL')
     graph_parser.add_argument('--levels', type=int, default='1',
                               help='number of levels of nodes to retrieve (default=1)')
+    graph_parser.add_argument('--exclude', nargs='+', choices=list(node_type_definition_importers.keys()),
+                              help='node type definitions to exclude from recursive retrieval')
     graph_parser.add_argument('--pretty', action='store_true', help='pretty print output')
 
     metadata_parser = subparsers.add_parser('metadata', help='retrieve metadata for a node from the Graph API')
@@ -238,7 +240,8 @@ class Fbarc(object):
         else:
             return requests.Request('GET', url, params=params).prepare().url
 
-    def get_nodes(self, root_node_id, root_node_type_definition_name, levels=1):
+    def get_nodes(self, root_node_id, root_node_type_definition_name, levels=1,
+                  exclude_node_type_definition_names=None):
         """
         Iterator for getting nodes, starting with the root node and proceeding
         for the specified number of levels of connected nodes.
@@ -251,16 +254,22 @@ class Fbarc(object):
             log.debug('Popped %s (%s) of the node queue (level %s). %s nodes left on the node queue.',
                       node_id, node_type_definition_name, level, len(node_queue))
             if node_id not in retrieved_nodes:
-                node_graph = self.get_node(node_id, node_type_definition_name)
-                if level < levels:
-                    connected_nodes = self.find_connected_nodes(node_type_definition_name, node_graph, extended=True)
-                    log.debug("%s connected nodes found in %s and added to node queue.", len(connected_nodes), node_id)
-                    for node_id, node_type_definition_name in connected_nodes:
-                        node_queue.append((node_id, node_type_definition_name, level+1))
-                retrieved_nodes.add(node_id)
-                yield node_graph
+                if node_type_definition_name is None or node_type_definition_name not in exclude_node_type_definition_names:
+                    node_graph = self.get_node(node_id, node_type_definition_name)
+                    if level < levels:
+                        connected_nodes = self.find_connected_nodes(node_type_definition_name, node_graph,
+                                                                    extended=True)
+                        log.debug("%s connected nodes found in %s and added to node queue.", len(connected_nodes),
+                                  node_id)
+                        for node_id, node_type_definition_name in connected_nodes:
+                            node_queue.append((node_id, node_type_definition_name, level + 1))
+                    retrieved_nodes.add(node_id)
+                    yield node_graph
+                else:
+                    log.debug('%s is an excluded node type definition (%s), so skipping.',
+                              node_id, node_type_definition_name)
             else:
-                log.debug("%s has already been retrieved, so skipping.", node_id)
+                log.debug('%s has already been retrieved, so skipping.', node_id)
 
     def get_node(self, node_id, node_type_definition_name):
         """
