@@ -194,6 +194,8 @@ def get_argparser():
     graph_parser = subparsers.add_parser('graph', help='retrieve nodes from the Graph API')
     node_type_definition_choices = ['discover']
     node_type_definition_choices.extend(node_type_definition_importers.keys())
+    # Remove user
+    node_type_definition_choices.remove('user')
     graph_parser.add_argument('node_type_definition', choices=node_type_definition_choices,
                               help='node type definition to use to retrieve the node. discover will discover node type '
                                    'from API.')
@@ -201,7 +203,7 @@ def get_argparser():
     graph_parser.add_argument('--levels', type=int, default='1',
                               help='number of levels of nodes to retrieve (default=1)')
     graph_parser.add_argument('--exclude', nargs='+', choices=list(node_type_definition_importers.keys()),
-                              help='node type definitions to exclude from recursive retrieval')
+                              help='node type definitions to exclude from recursive retrieval', default=[])
     graph_parser.add_argument('--pretty', action='store_true', help='pretty print output')
 
     metadata_parser = subparsers.add_parser('metadata', help='retrieve metadata for a node from the Graph API')
@@ -261,8 +263,8 @@ class Fbarc(object):
                                                                     extended=True)
                         log.debug("%s connected nodes found in %s and added to node queue.", len(connected_nodes),
                                   node_id)
-                        for node_id, node_type_definition_name in connected_nodes:
-                            node_queue.append((node_id, node_type_definition_name, level + 1))
+                        for connected_node_id, connected_node_type_definition_name in connected_nodes:
+                            node_queue.append((connected_node_id, connected_node_type_definition_name, level + 1))
                     retrieved_nodes.add(node_id)
                     yield node_graph
                 else:
@@ -395,7 +397,12 @@ class Fbarc(object):
 
         for connection, connected_node_type_definition_name in connections:
             if connection in graph_fragment:
-                for node in graph_fragment[connection]['data']:
+                if 'data' in graph_fragment[connection]:
+                    for node in graph_fragment[connection]['data']:
+                        connected_nodes.append((node['id'], connected_node_type_definition_name))
+                        connected_nodes.extend(self.find_connected_nodes(connected_node_type_definition_name, node))
+                else:
+                    node = graph_fragment[connection]
                     connected_nodes.append((node['id'], connected_node_type_definition_name))
                     connected_nodes.extend(self.find_connected_nodes(connected_node_type_definition_name, node))
         return connected_nodes

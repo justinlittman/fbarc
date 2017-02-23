@@ -108,6 +108,11 @@ class TestFbarc(unittest.TestCase):
             "albums": {
                 "data": [
                     {
+                        "cover_photo": {
+                            "created_time": "2017-02-22T14:46:01+0000",
+                            "name": "Happy birthday, George Washington! Learn more about our first President here: http://45.wh.g",
+                            "id": "1231054860315578"
+                        },
                         "photos": {
                             "data": [
                                 {
@@ -141,6 +146,7 @@ class TestFbarc(unittest.TestCase):
         }
 
         connected_nodes = self.fbarc.find_connected_nodes('page', graph, extended=True)
-        self.assertEqual(5, len(connected_nodes))
+        self.assertEqual(6, len(connected_nodes))
         self.assertTrue(('488852220724', 'album') in connected_nodes)
         self.assertTrue(('10158676054290725', 'photo') in connected_nodes)
+        self.assertTrue(('1231054860315578', 'photo') in connected_nodes)

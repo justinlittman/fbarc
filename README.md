@@ -171,9 +171,23 @@ To run unit tests:
 
         python -m unittest discover
 
+## Limitations
+
+### Users
+Facebook limits retrieving Users. F(b)arc does not support retrieving Users from the `graph` command,
+but it does retrieve them when connected from other nodes. The fields that are available are
+extremely limited.
+
+### Incremental archiving
+It would be ideal to be able to perform incremental archiving, i.e., only retrieve new or updated nodes.
+For example, only retrieve new Photos in an Album. Unfortunately, the Graph API doesn't support this.
+In particular, [ordering](https://developers.facebook.com/docs/graph-api/using-graph-api#ordering) does
+not appear to work as documented and if it did work, it is unclear what field is used for ordering.
+
+Suggestions on a strategy for incremental harvesting would be appreciated.
 
 ## Not yet implemented
-* Building out of definitions.
+* Further buiilding out node type definitions.
 * [Handling exceptions](https://developers.facebook.com/docs/graph-api/using-graph-api#errors), including rate limits and key expiration.
 * [Search](https://developers.facebook.com/docs/graph-api/using-graph-api#search)
 * Setup.py

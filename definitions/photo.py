@@ -1,18 +1,31 @@
 definition = {
     'fields': [
-        'link'
+        'link',
+        'created_time',
+        'updated_time',
+        'name'
     ],
     'extended_fields': [
-        'album',
-        'created_time',
+        'backdated_time',
+        'backdated_time_granularity',
+        'event',
         'height',
+        'images',
+        'page_story_id',
+        'picture',
+        'place',
         'width'
     ],
     'connections': {
-
     },
     'extended_connections': {
-        # 'comments',
-        # 'likes'
+        'album': 'album',
+        'comments': 'comment',
+        'from': 'user'
+        # 'likes': '',
+        # 'reactions': '',
+        # 'sharedposts: '',
+        # 'tags': '',
+        # 'comments': ''
     }
 }
