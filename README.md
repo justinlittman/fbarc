@@ -9,7 +9,7 @@ Facebook data is represented as a graph. The graph is composed of:
 * nodes:  Things on Facebook, such as Pages, Albums, and Photos. Each node has an id (e.g., 1322855124437680)
 and a type (e.g., Page).
 * fields:  Attributes such as things, such as name and id.
-* connections:  Associations between nodes, e.g., Page's Photos.
+* connections:  Associations between nodes, e.g., Page's Photos. Also known as "edges".
 
 The graph is represented as a JSON object. For example:
 
@@ -165,6 +165,24 @@ the fields and connections that are available for a node type. Less helpful is t
 
 Pull requests for improving node type definitions are welcome.
 
+## F(b)arc Viewer
+F(b)arc Viewer allows you to view and explore the data retrieved from the API.
+
+There are two approaches for invoking:
+
+    python fbarc_viewer.py <filepath(s) of file containing JSON>
+
+or:
+
+    export FLASK_APP=fbarc_viewer.py
+    flask run
+    
+A handy shortcut to load data directly from `fbarch.py` is:
+
+    python fbarc.py graph page TestyMcTestpage | python fbarc_viewer.py
+
+Once F(b)arc Viewer is running, it will be available at [http://localhost:5000/](http://localhost:5000/).
+
 ## Unit tests
 
 To run unit tests:
@@ -187,7 +205,6 @@ not appear to work as documented and if it did work, it is unclear what field is
 Suggestions on a strategy for incremental harvesting would be appreciated.
 
 ## Not yet implemented
-* Further buiilding out node type definitions.
 * [Handling exceptions](https://developers.facebook.com/docs/graph-api/using-graph-api#errors), including rate limits and key expiration.
 * [Search](https://developers.facebook.com/docs/graph-api/using-graph-api#search)
 * Setup.py

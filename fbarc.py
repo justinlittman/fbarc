@@ -147,6 +147,8 @@ def main():
         fb = Fbarc(app_id=app_id, app_secret=app_secret)
         if args.command == 'metadata':
             print_graph(fb.get_metadata(args.node), pretty=args.pretty)
+        elif args.command == 'search':
+            print_graph(fb.search(args.node_type, args.query))
         else:
             node_type_definition_name = args.node_type_definition
             if node_type_definition_name == 'discover':
@@ -279,17 +281,7 @@ class Fbarc(object):
         """
         log.info("Getting node %s (%s)", node_id, node_type_definition_name)
         url, params = self._prepare_request(node_id, node_type_definition_name)
-        node_graph = self._perform_http_get(url, params=params)
-
-        # Queue of pages to retrieve.
-        paging_queue = collections.deque(self.find_paging_links(node_graph))
-
-        # Retrieve pages. Note that additional pages may be appended to queue.
-        while paging_queue:
-            page_link, graph_fragment = paging_queue.popleft()
-            paging_queue.extend(self.get_page(page_link, graph_fragment))
-
-        return node_graph
+        return self._perform_http_get(url, params=params, paging=True)
 
     def get_page(self, page_link, graph_fragment):
         """
@@ -421,9 +413,9 @@ class Fbarc(object):
                                                                                     self.app_id,
                                                                                     self.app_secret)
         resp = requests.get(url)
-        (_, self.token) = resp.text.split('=')
+        self.token = resp.json()['access_token']
 
-    def _perform_http_get(self, *args, **kwargs):
+    def _perform_http_get(self, *args, paging=False, **kwargs):
         # Get an access token if necessary
         if not self.token:
             self._get_app_token()
@@ -431,7 +423,18 @@ class Fbarc(object):
         params = kwargs.pop('params', {})
         params['access_token'] = self.token
 
-        return requests.get(params=params, *args, **kwargs).json()
+        node_graph = requests.get(params=params, *args, **kwargs).json()
+
+        if paging:
+            # Queue of pages to retrieve.
+            paging_queue = collections.deque(self.find_paging_links(node_graph))
+
+            # Retrieve pages. Note that additional pages may be appended to queue.
+            while paging_queue:
+                page_link, graph_fragment = paging_queue.popleft()
+                paging_queue.extend(self.get_page(page_link, graph_fragment))
+
+        return node_graph
 
     def find_paging_links(self, graph_fragment):
         """

@@ -11,9 +11,10 @@ definition = {
 
     ],
     'connections': {
+        'from': 'user'
     },
     'extended_connections': {
         'parent': 'comment',
-        'from': 'user'
+        'comments': 'comment'
     }
 }
