@@ -1,32 +1,24 @@
 definition = {
-    'fields': [
-        'description',
-        'end_time',
-        'event_times',
-        'name',
-        'start_time'
-    ],
-    'extended_fields': [
-        'attending_count',
-        'category',
-        'cover',
-        'declined_count',
-        'interested_count',
-        'is_canceled',
-        'maybe_count',
-        'noreply_count',
-        'owner',
-        'place',
-        'timezone',
-        'type',
-        'updated_time'
-    ],
-    'connections': {
-    },
-    'extended_connections': {
-        'comments': 'comment',
-        'photos': 'photo',
-        'picture': 'photo',
-        'feed': 'post'
-    }
+    'attending_count': {},
+    'category': {},
+    'comments': {'edge_type': 'comment'},
+    'cover': {},
+    'declined_count': {},
+    'description': {'default': True},
+    'end_time': {'default': True},
+    'event_times': {'default': True},
+    'feed': {'edge_type': 'post'},
+    'interested_count': {},
+    'is_canceled': {},
+    'maybe_count': {},
+    'name': {'default': True},
+    'noreply_count': {},
+    'owner': {},
+    'photos': {'edge_type': 'photo'},
+    'picture': {'edge_type': 'photo'},
+    'place': {},
+    'start_time': {'default': True},
+    'timezone': {},
+    'type': {},
+    'updated_time': {}
 }

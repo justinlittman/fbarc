@@ -4,6 +4,7 @@ import json
 from collections import OrderedDict
 import itertools
 import fileinput
+import sys
 
 app = Flask(__name__)
 
@@ -138,7 +139,12 @@ obj_renderers = {
 if __name__ == '__main__':
     for line in fileinput.input():
         node = json.loads(line)
-        nodes[node['id']] = node
-        if first_node_id is None:
-            first_node_id = node['id']
+        if 'id' in node:
+            nodes[node['id']] = node
+            if first_node_id is None:
+                first_node_id = node['id']
+        else:
+            print('Error line: {}'.format(line))
+            sys.exit(1)
+
     app.run()

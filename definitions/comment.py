@@ -1,20 +1,12 @@
 definition = {
-    'fields': [
-        'created_time',
-        'message'
-    ],
-    'extended_fields': [
-        'comment_count',
-        'like_count',
-        'message_tags',
-        'object',
+    'comment_count': {},
+    'comments': {'edge_type': 'comment'},
+    'created_time': {'default': True},
+    'from': {'default': True},
+    'like_count': {},
+    'message': {'default': True},
+    'message_tags': {},
+    'object': {},
+    'parent': {'edge_type': 'comment'}
 
-    ],
-    'connections': {
-        'from': 'user'
-    },
-    'extended_connections': {
-        'parent': 'comment',
-        'comments': 'comment'
-    }
 }

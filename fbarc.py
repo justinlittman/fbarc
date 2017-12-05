@@ -33,22 +33,22 @@ GRAPH_URL = "https://graph.facebook.com"
 log = logging.getLogger(__name__)
 
 
-def load_node_type_definition(node_type_definition_package):
+def load_definition(definition_package):
     """
     Returns a map of node_types to importers loaded from a package.
     """
-    node_type_definition_importers = {}
-    for importer, modname, _ in pkgutil.iter_modules(node_type_definition_package.__path__):
-        node_type_definition_importers[modname] = importer
-    return node_type_definition_importers
+    definition_importers = {}
+    for importer, modname, _ in pkgutil.iter_modules(definition_package.__path__):
+        definition_importers[modname] = importer
+    return definition_importers
 
 
 # Map of node type names to importers
-node_type_definition_importers = {}
+definition_importers = {}
 # Load node_types
-node_type_definition_importers.update(load_node_type_definition(definitions))
+definition_importers.update(load_definition(definitions))
 # Override with local_node_types
-node_type_definition_importers.update(load_node_type_definition(local_definitions))
+definition_importers.update(load_definition(local_definitions))
 
 
 def load_keys(args):
@@ -140,7 +140,7 @@ def main():
         input_keys(args)
     elif args.command == 'url':
         fb = Fbarc()
-        print(fb.generate_url(args.node, args.node_type_definition, escape=args.escape))
+        print(fb.generate_url(args.node, args.definition, escape=args.escape))
     else:
         # Load keys
         app_id, app_secret = load_keys(args)
@@ -150,12 +150,12 @@ def main():
         elif args.command == 'search':
             print_graph(fb.search(args.node_type, args.query))
         else:
-            node_type_definition_name = args.node_type_definition
-            if node_type_definition_name == 'discover':
-                node_type_definition_name = fb.discover_type(args.node)
+            definition_name = args.definition
+            if definition_name == 'discover':
+                definition_name = fb.discover_type(args.node)
 
-            print_graphs(fb.get_nodes(args.node, node_type_definition_name, levels=args.levels,
-                                      exclude_node_type_definition_names=args.exclude), pretty=args.pretty)
+            print_graphs(fb.get_nodes(args.node, definition_name, levels=args.levels,
+                                      exclude_definition_names=args.exclude), pretty=args.pretty)
 
 
 def print_graph(graph, pretty=False):
@@ -194,17 +194,16 @@ def get_argparser():
     subparsers.add_parser('configure', help='input API credentials and store in configuration file')
 
     graph_parser = subparsers.add_parser('graph', help='retrieve nodes from the Graph API')
-    node_type_definition_choices = ['discover']
-    node_type_definition_choices.extend(node_type_definition_importers.keys())
-    # Remove user
-    node_type_definition_choices.remove('user')
-    graph_parser.add_argument('node_type_definition', choices=node_type_definition_choices,
-                              help='node type definition to use to retrieve the node. discover will discover node type '
+    definition_choices = ['discover']
+    definition_choices.extend(definition_importers.keys())
+
+    graph_parser.add_argument('definition', choices=definition_choices,
+                              help='definition to use to retrieve the node. discover will discover node type '
                                    'from API.')
     graph_parser.add_argument('node', help='identify node to retrieve by providing node id, username, or Facebook URL')
     graph_parser.add_argument('--levels', type=int, default='1',
                               help='number of levels of nodes to retrieve (default=1)')
-    graph_parser.add_argument('--exclude', nargs='+', choices=list(node_type_definition_importers.keys()),
+    graph_parser.add_argument('--exclude', nargs='+', choices=list(definition_importers.keys()),
                               help='node type definitions to exclude from recursive retrieval', default=[])
     graph_parser.add_argument('--pretty', action='store_true', help='pretty print output')
 
@@ -214,8 +213,8 @@ def get_argparser():
     metadata_parser.add_argument('--pretty', action='store_true', help='pretty print output')
 
     url_parser = subparsers.add_parser('url', help='generate the url to retrieve the node from the Graph API')
-    url_parser.add_argument('node_type_definition', choices=list(node_type_definition_importers.keys()),
-                            help='node type definition to use to retrieve the node.')
+    url_parser.add_argument('definition', choices=list(definition_importers.keys()),
+                            help='definition to use to retrieve the node.')
     url_parser.add_argument('node', help='identify node to retrieve by providing node id or username')
     url_parser.add_argument('--escape', action='store_true', help='escape the characters in the url')
 
@@ -231,56 +230,56 @@ class Fbarc(object):
         self.token = None
 
         # Map of node types definition names to node type definitions
-        self._node_type_definitions = {}
+        self._definitions = {}
 
-    def generate_url(self, node_id, node_type_definition_name, escape=False):
+    def generate_url(self, node_id, definition_name, escape=False):
         """
         Returns the url for retrieving the specified node from the Graph API
         given the node type definition.
         """
-        url, params = self._prepare_request(node_id, node_type_definition_name)
+        url, params = self._prepare_request(node_id, definition_name)
         if not escape:
             return '{}?{}'.format(url, '&'.join(['{}={}'.format(k, v) for k, v in params.items()]))
         else:
             return requests.Request('GET', url, params=params).prepare().url
 
-    def get_nodes(self, root_node_id, root_node_type_definition_name, levels=1,
-                  exclude_node_type_definition_names=None):
+    def get_nodes(self, root_node_id, root_definition_name, levels=1,
+                  exclude_definition_names=None):
         """
         Iterator for getting nodes, starting with the root node and proceeding
         for the specified number of levels of connected nodes.
         """
         node_queue = collections.deque()
-        node_queue.appendleft((root_node_id, root_node_type_definition_name, 1))
+        node_queue.appendleft((root_node_id, root_definition_name, 1))
         retrieved_nodes = set()
         while node_queue:
-            node_id, node_type_definition_name, level = node_queue.popleft()
+            node_id, definition_name, level = node_queue.popleft()
             log.debug('Popped %s (%s) of the node queue (level %s). %s nodes left on the node queue.',
-                      node_id, node_type_definition_name, level, len(node_queue))
+                      node_id, definition_name, level, len(node_queue))
             if node_id not in retrieved_nodes:
-                if node_type_definition_name is None or node_type_definition_name not in exclude_node_type_definition_names:
-                    node_graph = self.get_node(node_id, node_type_definition_name)
+                if definition_name is None or definition_name not in exclude_definition_names:
+                    node_graph = self.get_node(node_id, definition_name)
                     if level < levels:
-                        connected_nodes = self.find_connected_nodes(node_type_definition_name, node_graph,
-                                                                    extended=True)
+                        connected_nodes = self.find_connected_nodes(definition_name, node_graph,
+                                                                    default_only=False)
                         log.debug("%s connected nodes found in %s and added to node queue.", len(connected_nodes),
                                   node_id)
-                        for connected_node_id, connected_node_type_definition_name in connected_nodes:
-                            node_queue.append((connected_node_id, connected_node_type_definition_name, level + 1))
+                        for connected_node_id, connected_definition_name in connected_nodes:
+                            node_queue.append((connected_node_id, connected_definition_name, level + 1))
                     retrieved_nodes.add(node_id)
                     yield node_graph
                 else:
                     log.debug('%s is an excluded node type definition (%s), so skipping.',
-                              node_id, node_type_definition_name)
+                              node_id, definition_name)
             else:
                 log.debug('%s has already been retrieved, so skipping.', node_id)
 
-    def get_node(self, node_id, node_type_definition_name):
+    def get_node(self, node_id, definition_name):
         """
         Gets a node graph as specified by the node type definition.
         """
-        log.info("Getting node %s (%s)", node_id, node_type_definition_name)
-        url, params = self._prepare_request(node_id, node_type_definition_name)
+        log.info("Getting node %s (%s)", node_id, definition_name)
+        url, params = self._prepare_request(node_id, definition_name)
         return self._perform_http_get(url, params=params, paging=True)
 
     def get_page(self, page_link, graph_fragment):
@@ -337,7 +336,7 @@ class Fbarc(object):
         """
         return self.get_metadata(node_id)['metadata']['type']
 
-    def _prepare_request(self, node_id, node_type_definition_name):
+    def _prepare_request(self, node_id, definition_name):
         """
         Prepare the request url and params.
 
@@ -345,7 +344,7 @@ class Fbarc(object):
         """
         params = {
             'metadata': 1,
-            'fields': self._prepare_field_param(node_type_definition_name, extended=True)
+            'fields': self._prepare_field_param(definition_name, default_only=False)
         }
         return self._prepare_url(node_id), params
 
@@ -356,55 +355,59 @@ class Fbarc(object):
         """
         return "{}/{}".format(GRAPH_URL, node_id)
 
-    def _prepare_field_param(self, node_type_definition_name, extended=False):
+    def _prepare_field_param(self, definition_name, default_only=True):
         """
         Construct the fields parameter.
         """
-        node_type_definition = self._get_node_type_definition(node_type_definition_name)
+        definition = self._get_definition(definition_name)
         fields = []
-        if extended:
+        if not default_only:
             fields.append('metadata{type}')
-        fields.extend(node_type_definition.get('fields', []))
-        if extended:
-            fields.extend(node_type_definition.get('extended_fields', []))
-        for connection, connection_definition in node_type_definition.get('connections', {}).items():
-            fields.append('{}{{{}}}'.format(connection, self._prepare_field_param(connection_definition)))
-        if extended:
-            for connection, connection_definition in node_type_definition.get('extended_connections', {}).items():
-                fields.append('{}{{{}}}'.format(connection, self._prepare_field_param(connection_definition)))
+        fields.extend(definition.default_fields)
+        if not default_only:
+            fields.extend(definition.fields)
+        for edge in definition.default_edges:
+            fields.append(
+                '{}{{{}}}'.format(edge, self._prepare_field_param(definition.get_edge_type(edge))))
+        if not default_only:
+            for edge in definition.edges:
+                fields.append(
+                    '{}{{{}}}'.format(edge, self._prepare_field_param(definition.get_edge_type(edge))))
         if 'id' not in fields:
             fields.insert(0, 'id')
         return ','.join(fields)
 
-    def find_connected_nodes(self, node_type_definition_name, graph_fragment, extended=False):
+    def find_connected_nodes(self, definition_name, graph_fragment, default_only=True):
         """
-        Returns a list of (node ids, node type definition names) found in a graph fragment.
+        Returns a list of (node ids, definition names) found in a graph fragment.
         """
         connected_nodes = []
-        node_type_definition = self._get_node_type_definition(node_type_definition_name)
-        # Get the connections from the node type definition.
-        connections = list(node_type_definition.get('connections', {}).items())
-        if extended:
-            connections.extend(list(node_type_definition.get('extended_connections', {}).items()))
-
-        for connection, connected_node_type_definition_name in connections:
-            if connection in graph_fragment:
-                if 'data' in graph_fragment[connection]:
-                    for node in graph_fragment[connection]['data']:
-                        connected_nodes.append((node['id'], connected_node_type_definition_name))
-                        connected_nodes.extend(self.find_connected_nodes(connected_node_type_definition_name, node))
-                else:
-                    node = graph_fragment[connection]
-                    connected_nodes.append((node['id'], connected_node_type_definition_name))
-                    connected_nodes.extend(self.find_connected_nodes(connected_node_type_definition_name, node))
+        definition = self._get_definition(definition_name)
+        # Get the connections from the definition.
+        edges = list(definition.default_edges)
+        if not default_only:
+            edges.extend(definition.edges)
+        for edge in edges:
+            if definition.should_follow_edge(edge):
+                edge_type = definition.get_edge_type(edge)
+                if edge in graph_fragment:
+                    if 'data' in graph_fragment[edge]:
+                        for node in graph_fragment[edge]['data']:
+                            connected_nodes.append((node['id'], edge_type))
+                            connected_nodes.extend(self.find_connected_nodes(edge_type, node))
+                    else:
+                        node = graph_fragment[edge]
+                        connected_nodes.append((node['id'], edge_type))
+                        connected_nodes.extend(self.find_connected_nodes(edge_type, node))
         return connected_nodes
 
-    def _get_node_type_definition(self, node_type_definition_name):
-        if node_type_definition_name not in self._node_type_definitions:
+    def _get_definition(self, definition_name):
+        if definition_name not in self._definitions:
             # This will raise a KeyError if not found
-            self._node_type_definitions[node_type_definition_name] = node_type_definition_importers[
-                node_type_definition_name].find_module(node_type_definition_name).load_module(node_type_definition_name)
-        return self._node_type_definitions[node_type_definition_name].definition
+            self._definitions[definition_name] = Definition(definition_importers[
+                                                                definition_name].find_module(
+                definition_name).load_module(definition_name).definition)
+        return self._definitions[definition_name]
 
     def _get_app_token(self):
         assert self.app_id and self.app_secret
@@ -468,6 +471,36 @@ class Fbarc(object):
                 page_queue.extend(self.find_paging_links(value))
 
         return page_queue
+
+
+class Definition:
+    def __init__(self, definition_map):
+        self.definition_map = definition_map
+        default_fields_set = set()
+        fields_set = set()
+        default_edges_set = set()
+        edges_set = set()
+        for name, field_definition in self.definition_map.items():
+            if 'edge_type' in field_definition:
+                if field_definition.get('default'):
+                    default_edges_set.add(name)
+                else:
+                    edges_set.add(name)
+            else:
+                if field_definition.get('default'):
+                    default_fields_set.add(name)
+                else:
+                    fields_set.add(name)
+        self.default_fields = tuple(sorted(default_fields_set))
+        self.fields = tuple(sorted(fields_set))
+        self.default_edges = tuple(sorted(default_edges_set))
+        self.edges = tuple(sorted(edges_set))
+
+    def get_edge_type(self, edge_name):
+        return self.definition_map[edge_name]['edge_type']
+
+    def should_follow_edge(self, edge_name):
+        return self.definition_map[edge_name].get('follow_edge', True)
 
 
 if __name__ == '__main__':

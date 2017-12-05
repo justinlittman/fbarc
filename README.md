@@ -9,7 +9,7 @@ Facebook data is represented as a graph. The graph is composed of:
 * nodes:  Things on Facebook, such as Pages, Albums, and Photos. Each node has an id (e.g., 1322855124437680)
 and a type (e.g., Page).
 * fields:  Attributes such as things, such as name and id.
-* connections:  Associations between nodes, e.g., Page's Photos. Also known as "edges".
+* edges:  Connections between nodes, e.g., Page's Photos.
 
 The graph is represented as a JSON object. For example:
 
@@ -34,8 +34,8 @@ The graph is represented as a JSON object. For example:
     }
 
 F(b)arc supports retrieving parts of the graph for archiving. To do so, it allows you to specify what fields
-and connections to retrieve for a particular node type. (The definition of what fields and connections to
-retrieve is referred to as a node type definition and is described further below).
+and edges to retrieve for a particular node type. (What fields and connections to
+retrieve is referred to as a definition and is described further below).
 
 ## Getting API keys
 Before you f(b)arc you will need to register an app. To do this:
@@ -89,14 +89,14 @@ commandline options (`--app_id`, `--app_secret`).
 The graph command will retrieve the graph for a node. The node is identified by a node id (e.g., 1191441824276882),
 name (e.g., WhiteHouse) or a Facebook url (e.g., https://www.facebook.com/WhiteHouse/).
 
-The node graph is retrieved according to the specified node type definition. If the type of a node is not
-known, provide a node definition of `discover` and f(b)arc will look up the node's type and
-try to match it to a node type definition.
+The node graph is retrieved according to the specified definition. If the type of a node is not
+known, provide a definition of `discover` and f(b)arc will look up the node's type and
+try to match it to a definition.
 
 f(b)arc finds additional nodes in the graph for a node. For example, for a Page it may find the
 Album nodes. The `--levels` parameter will determine the number of levels of nodes that are retrieved,
 with the default being 1 (i.e., the graph for just the node that was requested). Each additional node
-graph is returned separately. Use the `--exclude` parameter to exclude node type definitions from recursive
+graph is returned separately. Use the `--exclude` parameter to exclude definitions from recursive
 retrieval.
 
 Note that f(b)arc may need to make multiple requests to retrieve the entire node graph so executing the
@@ -115,55 +115,44 @@ cannot access.
 
 ### Url
 The url command will return the url for retrieving the graph of a node according to the specified
-node type definition.
+definition.
 
     python fbarc.py url page 1191441824276882
     
-## Node type definitions
-Node type definitions specify what fields and connections will be returned for a node type.
+## Definitions
+Definitions specify what fields and connections will be returned for a node type.
 
-Node type definitions are represented as simple python configuration files stored in the `definitions`
-or `local_definitions` directories. Node type definitions in `definitions` are distributed with f(b)arc. 
-You can add additional node type definitions in `local_definitions`. A node type definitions in `local_definitions`
-with the same filename as a node type definition in `definitions` will take precedence.
+Definitions are represented as simple python configuration files stored in the `definitions`
+or `local_definitions` directories. Definitions in `definitions` are distributed with f(b)arc. 
+You can add additional definitions in `local_definitions`. A definition in `local_definitions`
+with the same filename as a definition in `definitions` will take precedence.
 
-Here is an example node type definition for a Page:
+Here is an example definition for a Page:
 
     definition = {
-        'fields': [
-            'name',
-            'about'
-        ],
-        'extended_fields': [
-            'bio'
-        ],
-        'connections': {
-    
-        },
-        'extended_connections': {
-            'albums': 'album'
-        }
+        'albums': {'edge_type': 'album'},
+        'bio': {},
+        likes': {'edge_type': 'page', 'follow_edge': False},
+        'name': {'default': True}
     }
 
-`fields` are a list of the fields to be retrieved for the node. `connections` are a map of the
-connections to node type definitions for the connections to be retrieved for the node. When
-the connection is retrieved as part of the node's graph the node type definition will determine
-what fields and connections are retrieved.
+A definition is a specified as a map of names to fields or edges to be retrieved for the node.
 
-`extended_fields` and `extended_connections` are only retrieved when this node is the primary node
-being retrieved. If a node is being retrieved because it is a connection, the `extended_fields` and
-`extended_connections` will not be retrieved. In this example, if the graph of `WhiteHouse` is
-being retrieved with the Page node type definition, `fields`, `extended_fields`, `connections`, and
-`extended_connections` will be retrieved. As part of that node graph, when retrieving the Page's Albums
-with the `album` node type definition, only the `fields` and `connections` will be retrieved. Note
-that if an album is retrieved separately because a level greater than 1 is specified, its
-extended fields and connections will also be retrieved.
+A name with an `edge_type` is an edge. The value of `edge_type` is the name of another definition.
+
+A field or edge in which `default` is `True` will always be retrieved. Otherwise, the field or
+edge will only be retrieved when the node is the primary node being retrieved. In other words,
+default fields or edges specify the summary for a node type; other fields or edges are part
+of the detail for a node type.
+
+If an edge has `follow_edge` set to `False` then only the default fields or edges will be retrieved
+for that edge. That edge will be omitted from recursive retrieval. For example, for a Page, the
+likes edge is set to not follow edges because this would cause retrieval of all pages that liked
+this page, which is not desired.
 
 The [Graph API Explorer](https://developers.facebook.com/tools/explorer) is helpful for understanding
 the fields and connections that are available for a node type. Less helpful is the 
 [Graph API Reference](https://developers.facebook.com/docs/graph-api/reference).
-
-Pull requests for improving node type definitions are welcome.
 
 ## F(b)arc Viewer
 F(b)arc Viewer allows you to view and explore the data retrieved from the API.

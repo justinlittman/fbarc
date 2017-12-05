@@ -1,35 +1,26 @@
 definition = {
-    'fields': [
-        'created_time',
-        'from',
-        'message',
-        'permalink_url',
-        'status_type',
-        'to',
-        'type',
-        'update_time'
-    ],
-    'extended_fields': [
-        'attachments',
-        'caption',
-        'description',
-        'icon',
-        'likes',
-        'link',
-        'object_id',
-        'message_tags',
-        'parent_id',
-        'picture',
-        'place',
-        'properties',
-        'reactions',
-        'shares',
-        'source',
-        'story'
-    ],
-    'connections': {
-    },
-    'extended_connections': {
-        'comments': 'comment'
-    }
+    'caption': {},
+    'comments': {'edge_type': 'comment'},
+    'created_time': {'default': True},
+    'description': {},
+    'from': {'default': True},
+    'icon': {},
+    'likes': {},
+    'link': {},
+    'message': {'default': True},
+    'message_tags': {},
+    'object_id': {},
+    'parent_id': {},
+    'permalink_url': {'default': True},
+    'picture': {},
+    'place': {},
+    'properties': {},
+    'reactions': {},
+    'shares': {},
+    'source': {},
+    'status_type': {'default': True},
+    'story': {},
+    'to': {'default': True},
+    'type': {'default': True},
+    'updated_time': {'default': True}
 }

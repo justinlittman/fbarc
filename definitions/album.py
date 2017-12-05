@@ -1,31 +1,23 @@
 definition = {
-    'fields': [
-        'name',
-        'photo_count',
-        'created_time',
-        'description',
-        'updated_time',
-        'video_count'
-    ],
-    'extended_fields': [
-        'backdated_time',
-        'backdated_time_granularity',
-        'event',
-        'link',
-        'location',
-        'modified_major',
-        'place',
-        'type'
-    ],
-    'connections': {
-        'photos': 'photo',
-        'cover_photo': 'photo'
-    },
-    'extended_connections': {
-        'comments': 'comment',
-        'from': 'user'
-        # 'likes': '',
-        # 'reactions': '',
-        # 'comments': ''
-    }
+    'backdated_time': {},
+    'backdated_time_granularity': {},
+    'comments': {'edge_type': 'comment'},
+    'cover_photo': {},
+    'created_time': {'default': True},
+    'description': {'default': True},
+    'event': {'edge_type': 'event'},
+    'from': {},
+    'link': {},
+    'location': {},
+    'modified_major': {},
+    'name': {'default': True},
+    'place': {},
+    'photo_count': {'default': True},
+    'photos': {'edge_type': 'photo'},
+    'updated_time': {'default': True},
+    'type': {},
+    'video_count': {'default': True},
+    # 'likes': '',
+    # 'reactions': '',
+    # 'comments': ''
 }
