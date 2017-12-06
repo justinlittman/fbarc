@@ -10,6 +10,7 @@ import argparse
 import sys
 import os
 import collections
+import copy
 
 import definitions
 import local_definitions
@@ -146,7 +147,16 @@ def main():
         app_id, app_secret = load_keys(args)
         fb = Fbarc(app_id=app_id, app_secret=app_secret)
         if args.command == 'metadata':
-            print_graph(fb.get_metadata(args.node), pretty=args.pretty)
+            if args.update:
+                node_type, fields, connections = fb.get_parsed_metadata(args.node)
+                fields.extend(connections)
+                print_definition_map(update_definition_map(fb.get_definition(node_type).definition_map, fields))
+            elif args.template:
+                _, fields, connections = fb.get_parsed_metadata(args.node)
+                fields.extend(connections)
+                print_definition_map(definition_map_template(fields))
+            else:
+                print_graph(fb.get_metadata(args.node), pretty=args.pretty)
         elif args.command == 'search':
             print_graph(fb.search(args.node_type, args.query))
         else:
@@ -158,6 +168,20 @@ def main():
                                       exclude_definition_names=args.exclude), pretty=args.pretty)
 
 
+def update_definition_map(definition_map, field_names):
+    new_definition_map = copy.deepcopy(definition_map)
+    for field_name in field_names:
+        if field_name not in new_definition_map:
+            new_definition_map[field_name] = {'omit': True, 'comment': 'Added field'}
+    return new_definition_map
+
+def definition_map_template(field_names):
+    definition_map = {}
+    for name in field_names:
+        definition_map[name] = {'omit': True}
+    return definition_map
+
+
 def print_graph(graph, pretty=False):
     print(json.dumps(graph, indent=4 if pretty else None))
 
@@ -165,6 +189,17 @@ def print_graph(graph, pretty=False):
 def print_graphs(graph_iter, pretty=False):
     for graph in graph_iter:
         print_graph(graph, pretty)
+
+
+def print_definition_map(definition_map):
+    print('definition = {')
+    for name in sorted(definition_map.keys()):
+        field_definition =  definition_map[name]
+        if 'comment' in field_definition:
+            comment = field_definition.pop('comment')
+            print('    # {}'.format(comment))
+        print('    \'{}\': {},'.format(name, field_definition))
+    print('}')
 
 
 def get_argparser():
@@ -202,7 +237,7 @@ def get_argparser():
                                    'from API.')
     graph_parser.add_argument('node', help='identify node to retrieve by providing node id, username, or Facebook URL')
     graph_parser.add_argument('--levels', type=int, default='1',
-                              help='number of levels of nodes to retrieve (default=1)')
+                              help='number of levels of nodes to retrieve (default=1, infinite=0)')
     graph_parser.add_argument('--exclude', nargs='+', choices=list(definition_importers.keys()),
                               help='node type definitions to exclude from recursive retrieval', default=[])
     graph_parser.add_argument('--pretty', action='store_true', help='pretty print output')
@@ -211,6 +246,9 @@ def get_argparser():
     metadata_parser.add_argument('node', help='identify node to retrieve by providing node id, username, or Facebook '
                                               'URL')
     metadata_parser.add_argument('--pretty', action='store_true', help='pretty print output')
+    metadata_parser.add_argument('--template', action='store_true', help='output a definition template')
+    metadata_parser.add_argument('--update', action='store_true',
+                                 help='update existing template with additional fields')
 
     url_parser = subparsers.add_parser('url', help='generate the url to retrieve the node from the Graph API')
     url_parser.add_argument('definition', choices=list(definition_importers.keys()),
@@ -259,7 +297,7 @@ class Fbarc(object):
             if node_id not in retrieved_nodes:
                 if definition_name is None or definition_name not in exclude_definition_names:
                     node_graph = self.get_node(node_id, definition_name)
-                    if level < levels:
+                    if levels == 0 or level < levels:
                         connected_nodes = self.find_connected_nodes(definition_name, node_graph,
                                                                     default_only=False)
                         log.debug("%s connected nodes found in %s and added to node queue.", len(connected_nodes),
@@ -330,6 +368,16 @@ class Fbarc(object):
         """
         return self._perform_http_get(self._prepare_url(node_id), params={'metadata': 1})
 
+    def get_parsed_metadata(self, node_id):
+        """
+        Returns (type, fields, connections) for a node.
+        """
+        field_names = []
+        metadata = self.get_metadata(node_id)
+        for field in metadata['metadata']['fields']:
+            field_names.append(field['name'])
+        return metadata['metadata']['type'], field_names, metadata['metadata']['connections'].keys()
+
     def discover_type(self, node_id):
         """
         Look up the type of a node.
@@ -359,7 +407,7 @@ class Fbarc(object):
         """
         Construct the fields parameter.
         """
-        definition = self._get_definition(definition_name)
+        definition = self.get_definition(definition_name)
         fields = []
         if not default_only:
             fields.append('metadata{type}')
@@ -382,7 +430,7 @@ class Fbarc(object):
         Returns a list of (node ids, definition names) found in a graph fragment.
         """
         connected_nodes = []
-        definition = self._get_definition(definition_name)
+        definition = self.get_definition(definition_name)
         # Get the connections from the definition.
         edges = list(definition.default_edges)
         if not default_only:
@@ -401,7 +449,7 @@ class Fbarc(object):
                         connected_nodes.extend(self.find_connected_nodes(edge_type, node))
         return connected_nodes
 
-    def _get_definition(self, definition_name):
+    def get_definition(self, definition_name):
         if definition_name not in self._definitions:
             # This will raise a KeyError if not found
             self._definitions[definition_name] = Definition(definition_importers[
@@ -481,16 +529,17 @@ class Definition:
         default_edges_set = set()
         edges_set = set()
         for name, field_definition in self.definition_map.items():
-            if 'edge_type' in field_definition:
-                if field_definition.get('default'):
-                    default_edges_set.add(name)
+            if not field_definition.get('omit'):
+                if 'edge_type' in field_definition:
+                    if field_definition.get('default'):
+                        default_edges_set.add(name)
+                    else:
+                        edges_set.add(name)
                 else:
-                    edges_set.add(name)
-            else:
-                if field_definition.get('default'):
-                    default_fields_set.add(name)
-                else:
-                    fields_set.add(name)
+                    if field_definition.get('default'):
+                        default_fields_set.add(name)
+                    else:
+                        fields_set.add(name)
         self.default_fields = tuple(sorted(default_fields_set))
         self.fields = tuple(sorted(fields_set))
         self.default_edges = tuple(sorted(default_edges_set))

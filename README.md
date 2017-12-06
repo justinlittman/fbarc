@@ -96,8 +96,9 @@ try to match it to a definition.
 f(b)arc finds additional nodes in the graph for a node. For example, for a Page it may find the
 Album nodes. The `--levels` parameter will determine the number of levels of nodes that are retrieved,
 with the default being 1 (i.e., the graph for just the node that was requested). Each additional node
-graph is returned separately. Use the `--exclude` parameter to exclude definitions from recursive
-retrieval.
+graph is returned separately. Setting `--levels` to 0 will continue until all nodes reachable by edges
+are exhausted. Be careful, because depending on the definitions, this could be, well, infinite. Use the
+`--exclude` parameter to exclude definitions from recursive retrieval.
 
 Note that f(b)arc may need to make multiple requests to retrieve the entire node graph so executing the
 graph command may take some time.
@@ -112,6 +113,8 @@ The metadata command will retrieve all of the fields and connections for a node.
 Note that you may not be able to actually retrieve all of those fields or connections with the
 level of permissions of your API keys. The API will ignore any fields or connections that you
 cannot access.
+
+The `--template` and `--update` parameters help with creating definitions. These are described below.
 
 ### Url
 The url command will return the url for retrieving the graph of a node according to the specified
@@ -133,7 +136,8 @@ Here is an example definition for a Page:
         'albums': {'edge_type': 'album'},
         'bio': {},
         likes': {'edge_type': 'page', 'follow_edge': False},
-        'name': {'default': True}
+        'name': {'default': True},
+        'workflows': {'omit': True},
     }
 
 A definition is a specified as a map of names to fields or edges to be retrieved for the node.
@@ -145,10 +149,19 @@ edge will only be retrieved when the node is the primary node being retrieved. I
 default fields or edges specify the summary for a node type; other fields or edges are part
 of the detail for a node type.
 
+A field or edge in which `omit` is `True` will be ignored. This is helpful for keeping track of fields
+or edges that have been considered, but are not to be retrieved.
+
 If an edge has `follow_edge` set to `False` then only the default fields or edges will be retrieved
 for that edge. That edge will be omitted from recursive retrieval. For example, for a Page, the
 likes edge is set to not follow edges because this would cause retrieval of all pages that liked
 this page, which is not desired.
+
+The `--template` and `--update` parameters of the metadata command can assist with creating definitions.
+`--template` will produce a definition for a node type that includes all possible fields or edges with 
+`omit` set to `True` by default. `--update` will update an existing definition with any new fields or edges 
+that are not already included in the definition. The new field or edges will be indicated by a comment 
+("Added field") and will have `omit` set to `True`.
 
 The [Graph API Explorer](https://developers.facebook.com/tools/explorer) is helpful for understanding
 the fields and connections that are available for a node type. Less helpful is the 

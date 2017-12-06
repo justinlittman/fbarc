@@ -1,48 +1,381 @@
 definition = {
     'about': {'default': True},
+    # Added field
+    'access_token': {'omit': True},
+    # Added field
+    'ad_campaign': {'omit': True},
+    # Added field
+    'admin_notes': {'omit': True},
     'affiliation': {},
+    # Added field
+    'agencies': {'omit': True},
     'albums': {'edge_type': 'album'},
+    # Added field
+    'app_id': {'omit': True},
+    # Added field
+    'app_links': {'omit': True},
+    # Added field
+    'artists_we_like': {'omit': True},
+    # Added field
+    'assigned_users': {'omit': True},
+    # Added field
+    'attire': {'omit': True},
+    # Added field
+    'audio_copyrights': {'omit': True},
+    # Added field
+    'awards': {'omit': True},
+    # Added field
+    'band_interests': {'omit': True},
+    # Added field
+    'band_members': {'omit': True},
+    # Added field
+    'bc_sponsored_posts': {'omit': True},
     'best_page': {},
     'bio': {},
     'birthday': {},
+    # Added field
+    'blocked': {'omit': True},
+    # Added field
+    'booking_agent': {'omit': True},
+    # Added field
+    'broadcast_messages': {'omit': True},
+    # Added field
+    'built': {'omit': True},
+    # Added field
+    'business': {'omit': True},
+    # Added field
+    'business_activities': {'omit': True},
+    # Added field
+    'businesssettinglogs': {'omit': True},
+    # Added field
+    'call_to_actions': {'omit': True},
+    # Added field
+    'can_checkin': {'omit': True},
+    # Added field
+    'can_post': {'omit': True},
+    # Added field
+    'canvas_elements': {'omit': True},
+    # Added field
+    'canvases': {'omit': True},
     'category': {'default': True},
     'category_list': {},
+    # Added field
+    'checkin_posts': {'omit': True},
     'checkins': {},
+    # Added field
+    'claimed_urls': {'omit': True},
+    # Added field
+    'company_overview': {'omit': True},
+    # Added field
+    'connected_instagram_account': {'omit': True},
     'contact_address': {},
+    # Added field
+    'context': {'omit': True},
+    # Added field
+    'conversations': {'omit': True},
+    # Added field
+    'country_page_likes': {'omit': True},
     'cover': {},
+    # Added field
+    'culinary_team': {'omit': True},
+    # Added field
+    'curated_collections': {'omit': True},
     'current_location': {},
     'description': {},
+    # Added field
+    'description_html': {'omit': True},
+    # Added field
+    'directed_by': {'omit': True},
     'display_subtext': {},
+    # Added field
+    'displayed_message_response_time': {'omit': True},
     'emails': {},
     'engagement': {},
     'events': {'edge_type': 'event'},
     'fan_count': {},
     'featured_video': {'edge_type': 'video'},
+    # Added field
+    'featured_videos_collection': {'omit': True},
+    # Added field
+    'features': {'omit': True},
+    # Added field
+    'feed': {'omit': True},
+    # Added field
+    'food_styles': {'omit': True},
+    # Added field
+    'founded': {'omit': True},
     'general_info': {},
+    # Added field
+    'general_manager': {'omit': True},
+    # Added field
+    'genre': {'omit': True},
+    # Added field
+    'global_brand_children': {'omit': True},
+    # Added field
+    'global_brand_page_name': {'omit': True},
+    # Added field
+    'global_brand_root_id': {'omit': True},
+    # Added field
+    'has_added_app': {'omit': True},
+    # Added field
+    'has_whatsapp_number': {'omit': True},
     'hometown': {},
+    # Added field
+    'hours': {'omit': True},
+    # Added field
+    'id': {'omit': True},
+    # Added field
+    'impressum': {'omit': True},
+    # Added field
+    'influences': {'omit': True},
+    # Added field
+    'insights': {'omit': True},
+    # Added field
+    'instagram_business_account': {'omit': True},
+    # Added field
+    'instant_articles': {'omit': True},
+    # Added field
+    'instant_articles_insights': {'omit': True},
+    # Added field
+    'instant_articles_review_status': {'omit': True},
+    # Added field
+    'is_always_open': {'omit': True},
+    # Added field
+    'is_chain': {'omit': True},
+    # Added field
+    'is_community_page': {'omit': True},
+    # Added field
+    'is_eligible_for_branded_content': {'omit': True},
+    # Added field
+    'is_owned': {'omit': True},
+    # Added field
+    'is_permanently_closed': {'omit': True},
+    # Added field
+    'is_published': {'omit': True},
+    # Added field
+    'is_unclaimed': {'omit': True},
     'is_verified': {},
-    'link': {'default': True},
+    # Added field
+    'is_webhooks_subscribed': {'omit': True},
+    # Added field
+    'labels': {'omit': True},
+    # Added field
+    'leadgen_conditional_questions_group': {'omit': True},
+    # Added field
+    'leadgen_context_cards': {'omit': True},
+    # Added field
+    'leadgen_draft_forms': {'omit': True},
+    # Added field
+    'leadgen_form_preview_details': {'omit': True},
+    # Added field
+    'leadgen_forms': {'omit': True},
+    # Added field
+    'leadgen_has_crm_integration': {'omit': True},
+    # Added field
+    'leadgen_has_fat_ping_crm_integration': {'omit': True},
+    # Added field
+    'leadgen_legal_content': {'omit': True},
+    # Added field
+    'leadgen_qualifiers': {'omit': True},
+    # Added field
+    'leadgen_tos_acceptance_time': {'omit': True},
+    # Added field
+    'leadgen_tos_accepted': {'omit': True},
+    # Added field
+    'leadgen_tos_accepting_user': {'omit': True},
+    # Added field
+    'leadgen_whitelisted_users': {'omit': True},
     'likes': {'edge_type': 'page', 'follow_edge': False},
+    'link': {'default': True},
+    # Added field
+    'live_encoders': {'omit': True},
+    # Added field
+    'live_videos': {'omit': True},
     'location': {},
+    # Added field
+    'locations': {'omit': True},
+    # Added field
+    'media_fingerprints': {'omit': True},
+    # Added field
+    'members': {'omit': True},
+    # Added field
+    'merchant_id': {'omit': True},
+    # Added field
+    'merchant_review_status': {'omit': True},
+    # Added field
+    'messenger_ads_quick_replies_type': {'omit': True},
+    # Added field
+    'messenger_profile': {'omit': True},
+    # Added field
+    'milestones': {'omit': True},
+    # Added field
+    'mission': {'omit': True},
+    # Added field
+    'mpg': {'omit': True},
     'name': {'default': True},
+    # Added field
+    'name_with_location_descriptor': {'omit': True},
+    # Added field
+    'nativeoffers': {'omit': True},
+    # Added field
+    'network': {'omit': True},
+    # Added field
+    'new_like_count': {'omit': True},
+    # Added field
+    'notes': {'omit': True},
+    # Added field
+    'notifications': {'omit': True},
+    # Added field
+    'offer_eligible': {'omit': True},
+    # Added field
+    'offers_v3': {'omit': True},
     'overall_star_rating': {},
-    'rating_count': {},
+    # Added field
+    'page_token': {'omit': True},
     'parent_page': {'edge_type': 'page', 'follow_edge': False},
+    # Added field
+    'parking': {'omit': True},
+    # Added field
+    'payment_options': {'omit': True},
+    # Added field
+    'pending_users': {'omit': True},
     'personal_info': {},
     'personal_interests': {},
+    # Added field
+    'pharma_safety_info': {'omit': True},
     'phone': {},
+    # Added field
+    'photos': {'omit': True},
+    # Added field
+    'picture': {'omit': True},
+    # Added field
+    'place_topics': {'omit': True},
+    # Added field
+    'place_type': {'omit': True},
+    # Added field
+    'plot_outline': {'omit': True},
+    # Added field
+    'posts': {'omit': True},
+    # Added field
+    'preferred_audience': {'omit': True},
+    # Added field
+    'press_contact': {'omit': True},
+    # Added field
+    'price_range': {'omit': True},
+    # Added field
+    'produced_by': {'omit': True},
+    # Added field
+    'product_catalogs': {'omit': True},
+    # Added field
+    'products': {'omit': True},
+    # Added field
+    'promotable_posts': {'omit': True},
+    # Added field
+    'promotion_eligible': {'omit': True},
+    # Added field
+    'promotion_ineligible_reason': {'omit': True},
+    # Added field
+    'public_transit': {'omit': True},
+    # Added field
+    'publisher_space': {'omit': True},
+    # Added field
+    'questions': {'omit': True},
+    'rating_count': {},
+    # Added field
+    'ratings': {'omit': True},
+    # Added field
+    'recipient': {'omit': True},
+    # Added field
+    'record_label': {'omit': True},
+    # Added field
+    'release_date': {'omit': True},
+    # Added field
+    'restaurant_orders': {'omit': True},
+    # Added field
+    'restaurant_services': {'omit': True},
+    # Added field
+    'restaurant_specialties': {'omit': True},
+    # Added field
+    'roles': {'omit': True},
+    # Added field
+    'rtb_dynamic_posts': {'omit': True},
+    # Added field
+    'saved_filters': {'omit': True},
+    # Added field
+    'saved_message_responses': {'omit': True},
+    # Added field
+    'schedule': {'omit': True},
+    # Added field
+    'scheduled_posts': {'omit': True},
     'screennames': {},
+    # Added field
+    'screenplay_by': {'omit': True},
+    # Added field
+    'season': {'omit': True},
+    # Added field
+    'seasons': {'omit': True},
+    # Added field
+    'secondary_receivers': {'omit': True},
+    # Added field
+    'settings': {'omit': True},
+    # Added field
+    'show_playlists': {'omit': True},
     'single_line_address': {},
+    # Added field
+    'starring': {'omit': True},
+    # Added field
+    'start_info': {'omit': True},
+    # Added field
+    'store_location_descriptor': {'omit': True},
+    # Added field
+    'store_number': {'omit': True},
+    # Added field
+    'studio': {'omit': True},
+    # Added field
+    'subscribed_apps': {'omit': True},
+    # Added field
+    'supports_instant_articles': {'omit': True},
+    # Added field
+    'tabs': {'omit': True},
+    # Added field
+    'tagged': {'omit': True},
     'talking_about_count': {},
+    # Added field
+    'thread_settings': {'omit': True},
+    # Added field
+    'threads': {'omit': True},
+    # Added field
+    'tours': {'omit': True},
+    # Added field
+    'unread_message_count': {'omit': True},
+    # Added field
+    'unread_notif_count': {'omit': True},
+    # Added field
+    'unseen_message_count': {'omit': True},
     'username': {'default': True},
     'verification_status': {},
+    # Added field
+    'video_broadcasts': {'omit': True},
+    # Added field
+    'video_copyright_rules': {'omit': True},
+    # Added field
+    'video_copyrights': {'omit': True},
+    # Added field
+    'video_lists': {'omit': True},
+    # Added field
+    'video_media_copyrights': {'omit': True},
+    'videos': {'edge_type': 'video'},
+    # Added field
+    'videos_you_can_use': {'omit': True},
+    'visitor_posts': {'edge_type': 'post'},
+    # Added field
+    'voip_info': {'omit': True},
     'website': {'default': True},
-    'whatsapp_number': {}
-    # 'feed': '',
-    # 'milestones': '',
-    # 'picture': '',
-    # 'posts': '',
-    # 'video_lists': '',
-    # 'videos': '',
-    # 'visitor_posts': ''
+    # Added field
+    'were_here_count': {'omit': True},
+    'whatsapp_number': {},
+    # Added field
+    'workflows': {'omit': True},
+    # Added field
+    'written_by': {'omit': True},
 }
