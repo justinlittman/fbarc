@@ -45,6 +45,8 @@ Before you f(b)arc you will need to register an app. To do this:
 3. Click `Add a New App` and complete the form.
 4. From the app's dashboard, note the app id and app secret.
 
+See below for more information on tokens.
+
 ## Install
 
 _Note: pip install coming once f(b)arc is more stable._
@@ -84,6 +86,26 @@ This will store your credentials in a file called `.fbarc` in your home
 directory so you don't have to keep providing them. If you would rather supply
 them directly you can set them in the environment (`APP_ID`, `APP_SECRET`) or using 
 commandline options (`--app_id`, `--app_secret`).
+
+### Tokens
+Using the API requires an [access token](https://developers.facebook.com/docs/facebook-login/access-tokens).
+F(b)arc supports app access tokens and user access tokens.
+
+F(b)arc can retrieve an app access token using the app id and app secret. However, there
+are some nodes that cannot be retrieved with an app access token, thus a user access token
+is recommended.
+
+A user access token allows retrieving more nodes than an app access token (but as used
+in f(b)arc is still limited to public data). There are two types of user access tokens:
+short-lived and long-lived tokens. Short-lived access tokens are valid for
+around an hour; long-lived access tokens for a few months. Long-lived user access tokens
+are retrieved using a short-lived user access tokens and the app id and app secret.
+
+When given a short-lived access token (e.g., with the `configure` command), f(b)arc will
+retrieve and store a long-lived access token. You can get a short-lived access token from
+[https://developers.facebook.com/tools/accesstoken/](https://developers.facebook.com/tools/accesstoken/).
+
+F(b)arc will warn you when you're long-lived user access token is going to expire.
 
 ### Graph
 The graph command will retrieve the graph for a node. The node is identified by a node id (e.g., 1191441824276882),
@@ -207,7 +229,6 @@ not appear to work as documented and if it did work, it is unclear what field is
 Suggestions on a strategy for incremental harvesting would be appreciated.
 
 ## Not yet implemented
-* [Handling exceptions](https://developers.facebook.com/docs/graph-api/using-graph-api#errors), including rate limits and key expiration.
 * [Search](https://developers.facebook.com/docs/graph-api/using-graph-api#search)
 * Setup.py
 * Travis configuration

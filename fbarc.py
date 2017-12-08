@@ -11,6 +11,9 @@ import sys
 import os
 import collections
 import copy
+from datetime import datetime, timedelta, timezone
+import iso8601
+import time
 
 import definitions
 import local_definitions
@@ -57,22 +60,28 @@ def load_keys(args):
     Get the Facebook API keys. Order of precedence is command line,
     environment, config file.
     """
-    app_id = args.app_id
-    app_secret = args.app_secret
-    env = os.environ.get
-    if not app_id:
-        app_id = env('APP_ID')
-    if not app_secret:
-        app_secret = env('APP_SECRET')
+    config = {}
+    input_app_id = None
+    input_app_secret = None
+    input_short_access_token = None
+    if args.config:
+        config = load_config(args)
+        if not config:
+            input_app_id, input_app_secret, input_short_access_token = input_keys(args)
+            if not input_short_access_token:
+                save_config(args, input_app_id, input_app_secret)
 
-    if args.config and not (app_id and app_secret):
-        credentials = load_config(args)
-        if credentials:
-            app_id = credentials['app_id']
-            app_secret = credentials['app_secret']
-        else:
-            app_id, app_secret = input_keys(args)
-    return app_id, app_secret
+    app_id = args.app_id or os.environ.get('APP_ID') or config.get('app_id') or input_app_id
+    app_secret = args.app_secret or os.environ.get('APP_SECRET') or config.get('app_secret') or input_app_secret
+    short_access_token = args.access_token or os.environ.get('ACCESS_TOKEN') or input_short_access_token
+    long_access_token = config.get('access_token')
+    expires_at = None
+    if 'expires_at' in config:
+        expires_at = iso8601.parse_date(config['expires_at'])
+
+    if not (app_id and app_secret):
+        sys.exit('App id and secret are required.')
+    return app_id, app_secret, short_access_token, long_access_token, expires_at
 
 
 def load_config(args):
@@ -81,27 +90,27 @@ def load_config(args):
     if not os.path.isfile(path):
         return {}
 
-    config = configparser.ConfigParser()
+    config = configparser.ConfigParser(allow_no_value=True)
     config.read(path)
     data = {}
-    for key in ['app_id', 'app_secret']:
-        try:
-            data[key] = config.get(profile, key)
-        except configparser.NoSectionError:
-            sys.exit("no such profile %s in %s" % (profile, path))
-        except configparser.NoOptionError:
-            sys.exit("missing %s from profile %s in %s" % (
-                key, profile, path))
+    try:
+        for key, value in config.items(profile):
+            data[key] = value
+    except configparser.NoSectionError:
+        sys.exit("no such profile %s in %s" % (profile, path))
     return data
 
 
-def save_config(args, app_id, app_secret):
+def save_config(args, app_id, app_secret, access_token=None, expires_at=None):
     if not args.config:
         return
     config = configparser.ConfigParser()
     config.add_section(args.profile)
     config.set(args.profile, 'app_id', app_id)
     config.set(args.profile, 'app_secret', app_secret)
+    if access_token and expires_at:
+        config.set(args.profile, 'access_token', access_token)
+        config.set(args.profile, 'expires_at', expires_at.isoformat())
 
     with open(args.config, 'w') as config_file:
         config.write(config_file)
@@ -112,16 +121,18 @@ def input_keys(args):
 
     config = load_config(args)
 
-    def i(name):
+    def i(name, optional=False):
         prompt = name.replace('_', ' ')
         if name in config:
             prompt += ' [%s]' % config[name]
+        if optional:
+            prompt += ' (optional)'
         return get_input(prompt + ": ") or config.get(name)
 
     app_id = i('app_id')
     app_secret = i('app_secret')
-    save_config(args, app_id, app_secret)
-    return app_id, app_secret
+    short_access_token = i('short_access_token', optional=True)
+    return app_id, app_secret, short_access_token
 
 
 def main():
@@ -138,34 +149,58 @@ def main():
         parser.print_help()
         sys.exit(1)
     elif args.command == 'configure':
-        input_keys(args)
+        app_id, app_secret, short_access_token = input_keys(args)
+        long_access_token = None
+        expires_at = None
+        if short_access_token:
+            long_access_token, expires_at = prepare_long_access_token(app_id, app_secret, short_access_token)
+        save_config(args, app_id, app_secret, long_access_token, expires_at)
     elif args.command == 'url':
         fb = Fbarc()
         print(fb.generate_url(args.node, args.definition, escape=args.escape))
     else:
         # Load keys
-        app_id, app_secret = load_keys(args)
-        fb = Fbarc(app_id=app_id, app_secret=app_secret)
-        if args.command == 'metadata':
-            if args.update:
-                node_type, fields, connections = fb.get_parsed_metadata(args.node)
-                fields.extend(connections)
-                print_definition_map(update_definition_map(fb.get_definition(node_type).definition_map, fields))
-            elif args.template:
-                _, fields, connections = fb.get_parsed_metadata(args.node)
-                fields.extend(connections)
-                print_definition_map(definition_map_template(fields))
-            else:
-                print_graph(fb.get_metadata(args.node), pretty=args.pretty)
-        elif args.command == 'search':
-            print_graph(fb.search(args.node_type, args.query))
+        app_id, app_secret, short_access_token, long_access_token, expires_at = load_keys(args)
+        if short_access_token:
+            long_access_token, expires_at = prepare_long_access_token(app_id, app_secret, short_access_token)
+            save_config(args, app_id, app_secret, long_access_token, expires_at)
+        token = long_access_token
+        if token:
+            print('Access token expires on {}'.format(expires_at), file=sys.stderr)
+            if expires_at < datetime.now(timezone.utc):
+                print('Warning: App token is expired.', file=sys.stderr)
+            elif expires_at < datetime.now(timezone.utc) - timedelta(days=1):
+                print('Warning: App token expires in less than a day.', file=sys.stderr)
         else:
-            definition_name = args.definition
-            if definition_name == 'discover':
-                definition_name = fb.discover_type(args.node)
+            token = get_app_token(app_id, app_secret)
+            print('Warning: Using an app token. You may encounter authorization problems.', file=sys.stderr)
+        try:
+            fb = Fbarc(token=token, delay_secs=args.delay)
+            if args.command == 'metadata':
+                if args.update:
+                    node_type, fields, connections = fb.get_parsed_metadata(args.node)
+                    fields.extend(connections)
+                    print_definition_map(update_definition_map(fb.get_definition(node_type).definition_map, fields))
+                elif args.template:
+                    _, fields, connections = fb.get_parsed_metadata(args.node)
+                    fields.extend(connections)
+                    print_definition_map(definition_map_template(fields))
+                else:
+                    print_graph(fb.get_metadata(args.node), pretty=args.pretty)
+            elif args.command == 'search':
+                print_graph(fb.search(args.node_type, args.query))
+            else:
+                definition_name = args.definition
+                if definition_name == 'discover':
+                    definition_name = fb.discover_type(args.node)
 
-            print_graphs(fb.get_nodes(args.node, definition_name, levels=args.levels,
-                                      exclude_definition_names=args.exclude), pretty=args.pretty)
+                print_graphs(fb.get_nodes(args.node, definition_name, levels=args.levels,
+                                          exclude_definition_names=args.exclude), pretty=args.pretty)
+        except FbException as e:
+            print('Error: {}'.format(e.message), file=sys.stderr)
+            if e.code == 100:
+                print('Hint: Use a user token instead of an app token. See README for explanation.', file=sys.stderr)
+            quit(1)
 
 
 def update_definition_map(definition_map, field_names):
@@ -174,6 +209,7 @@ def update_definition_map(definition_map, field_names):
         if field_name not in new_definition_map:
             new_definition_map[field_name] = {'omit': True, 'comment': 'Added field'}
     return new_definition_map
+
 
 def definition_map_template(field_names):
     definition_map = {}
@@ -193,6 +229,7 @@ def print_graphs(graph_iter, pretty=False):
 
 def print_definition_map(definition_map):
     print('definition = {')
+    definition_map.pop('id', None)
     for name in sorted(definition_map.keys()):
         field_definition =  definition_map[name]
         if 'comment' in field_definition:
@@ -218,10 +255,13 @@ def get_argparser():
                         default=None, help="Facebook app id")
     parser.add_argument("--app_secret",
                         default=None, help="Facebook app secret")
+    parser.add_argument("--access_token",
+                        default=None, help="Facebook access token")
     parser.add_argument('--config', default=config,
                         help="Config file containing Facebook keys")
     parser.add_argument('--profile', default='main',
                         help="Name of a profile in your configuration file")
+    parser.add_argument('--delay', type=float, help='delay between requests. (default=.5)', default=.5)
 
     # Subparsers
     subparsers = parser.add_subparsers(dest='command', help='command help')
@@ -261,14 +301,66 @@ def get_argparser():
     return parser
 
 
+def prepare_long_access_token(app_id, app_secret, short_access_token):
+    app_token = get_app_token(app_id, app_secret)
+    # Create new long access token
+    long_access_token = get_long_access_token(app_id, app_secret, short_access_token)
+    expires_at = get_token_expires_at(app_token, long_access_token)
+
+    return long_access_token, expires_at
+
+
+def get_app_token(app_id, app_secret):
+    url = "{}/oauth/access_token" \
+          "?client_id={}&client_secret={}&grant_type=client_credentials".format(GRAPH_URL,
+                                                                                app_id,
+                                                                                app_secret)
+    resp = requests.get(url)
+    return resp.json()['access_token']
+
+
+def get_long_access_token(app_id, app_secret, short_access_token):
+    url = "{}/oauth/access_token?grant_type=fb_exchange_token" \
+          "&client_id={}&client_secret={}&fb_exchange_token={}".format(GRAPH_URL,
+                                                                       app_id,
+                                                                       app_secret,
+                                                                       short_access_token)
+    response = requests.get(url)
+    raise_for_fb_exception(response)
+    return response.json()['access_token']
+
+
+def get_token_expires_at(app_token, token):
+    url = "{}/debug_token?input_token={}&access_token={}".format(GRAPH_URL,
+                                                                 token,
+                                                                 app_token)
+    response = requests.get(url)
+    raise_for_fb_exception(response)
+    return datetime.fromtimestamp(response.json()['data']['expires_at'], timezone.utc)
+
+
+def raise_for_fb_exception(response):
+    if response.status_code != requests.codes.ok:
+        try:
+            error_response = response.json()
+            log.error(json.dumps(error_response, indent=4))
+            raise FbException(error_response)
+        except json.decoder.JSONDecodeError:
+            response.raise_for_status()
+    response.raise_for_status()
+
+
 class Fbarc(object):
-    def __init__(self, app_id=None, app_secret=None):
-        self.app_id = app_id
-        self.app_secret = app_secret
-        self.token = None
+    def __init__(self, token=None, delay_secs=.5):
+        log.debug('Token is %s', token)
+        self.token = token
 
         # Map of node types definition names to node type definitions
         self._definitions = {}
+
+        self.last_get = None
+        log.debug('Delay is %s', delay_secs)
+        self.delay_secs = delay_secs
 
     def generate_url(self, node_id, definition_name, escape=False):
         """
@@ -296,6 +388,7 @@ class Fbarc(object):
                       node_id, definition_name, level, len(node_queue))
             if node_id not in retrieved_nodes:
                 if definition_name is None or definition_name not in exclude_definition_names:
+                    log.info("Getting node %s (%s). %s nodes left.", node_id, definition_name, len(node_queue))
                     node_graph = self.get_node(node_id, definition_name)
                     if levels == 0 or level < levels:
                         connected_nodes = self.find_connected_nodes(definition_name, node_graph,
@@ -316,7 +409,6 @@ class Fbarc(object):
         """
         Gets a node graph as specified by the node type definition.
         """
-        log.info("Getting node %s (%s)", node_id, definition_name)
         url, params = self._prepare_request(node_id, definition_name)
         return self._perform_http_get(url, params=params, paging=True)
 
@@ -348,7 +440,8 @@ class Fbarc(object):
 
         """
         log.debug("Getting page link: %s.", page_link)
-        page_fragment = requests.get(page_link).json()
+        # page_fragment = requests.get(page_link).json()
+        page_fragment = self._perform_http_get(page_link, use_token=False)
 
         pages = []
         # Look for paging in root of this graph fragment
@@ -457,24 +550,22 @@ class Fbarc(object):
                 definition_name).load_module(definition_name).definition)
         return self._definitions[definition_name]
 
-    def _get_app_token(self):
-        assert self.app_id and self.app_secret
-        url = "{}/oauth/access_token" \
-              "?client_id={}&client_secret={}&grant_type=client_credentials".format(GRAPH_URL,
-                                                                                    self.app_id,
-                                                                                    self.app_secret)
-        resp = requests.get(url)
-        self.token = resp.json()['access_token']
-
-    def _perform_http_get(self, *args, paging=False, **kwargs):
-        # Get an access token if necessary
-        if not self.token:
-            self._get_app_token()
+    def _perform_http_get(self, *args, paging=False, use_token=True, **kwargs):
+        # Optional delay
+        if self.last_get:
+            wait_secs = self.delay_secs - (datetime.now() - self.last_get).total_seconds()
+            if wait_secs > 0:
+                log.debug('Sleeping %s', wait_secs)
+                time.sleep(wait_secs)
+        self.last_get = datetime.now()
 
         params = kwargs.pop('params', {})
-        params['access_token'] = self.token
+        if use_token:
+            params['access_token'] = self.token
 
-        node_graph = requests.get(params=params, *args, **kwargs).json()
+        response = requests.get(params=params, *args, **kwargs)
+        raise_for_fb_exception(response)
+        node_graph = response.json()
 
         if paging:
             # Queue of pages to retrieve.
@@ -550,6 +641,15 @@ class Definition:
 
     def should_follow_edge(self, edge_name):
         return self.definition_map[edge_name].get('follow_edge', True)
+
+
+class FbException(Exception):
+    def __init__(self, error_json):
+        super(FbException, self).__init__(error_json['error']['message'])
+        self.message = error_json['error']['message']
+        self.type = error_json['error']['type']
+        self.code = error_json['error']['code']
+        self.subcode = error_json['error']['error_subcode']
 
 
 if __name__ == '__main__':
