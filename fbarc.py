@@ -231,7 +231,7 @@ def print_definition_map(definition_map):
     print('definition = {')
     definition_map.pop('id', None)
     for name in sorted(definition_map.keys()):
-        field_definition =  definition_map[name]
+        field_definition = definition_map[name]
         if 'comment' in field_definition:
             comment = field_definition.pop('comment')
             print('    # {}'.format(comment))
@@ -361,6 +361,8 @@ class Fbarc(object):
         self.last_get = None
         log.debug('Delay is %s', delay_secs)
         self.delay_secs = delay_secs
+        self.get_errors_limit = 10
+        self.get_error_delay_secs = 30
 
     def generate_url(self, node_id, definition_name, escape=False):
         """
@@ -550,7 +552,7 @@ class Fbarc(object):
                 definition_name).load_module(definition_name).definition)
         return self._definitions[definition_name]
 
-    def _perform_http_get(self, *args, paging=False, use_token=True, **kwargs):
+    def _perform_http_get(self, *args, paging=False, use_token=True, try_count=1, **kwargs):
         # Optional delay
         if self.last_get:
             wait_secs = self.delay_secs - (datetime.now() - self.last_get).total_seconds()
@@ -563,8 +565,32 @@ class Fbarc(object):
         if use_token:
             params['access_token'] = self.token
 
-        response = requests.get(params=params, *args, **kwargs)
-        raise_for_fb_exception(response)
+        try:
+            response = requests.get(params=params, *args, **kwargs)
+            raise_for_fb_exception(response)
+        except requests.exceptions.ConnectionError as e:
+            # Handle (possibly) transient connection errors
+            logging.error('caught connection error %s on %s try', e, try_count)
+            if self.get_errors_limit == try_count:
+                logging.error('received too many errors')
+                raise e
+            else:
+                time.sleep(self.get_error_delay_secs)
+                return self._perform_http_get(*args, paging=paging, use_token=use_token, try_count=try_count + 1,
+                                              **kwargs)
+        except FbException as e:
+            # Handle transient facebook errors
+            if e.is_transient:
+                logging.error('caught facebook error %s on %s try', e, try_count)
+                if self.get_errors_limit == try_count:
+                    logging.error('received too many errors')
+                    raise e
+                else:
+                    time.sleep(self.get_error_delay_secs)
+                    return self._perform_http_get(*args, paging=paging, use_token=use_token, try_count=try_count + 1,
+                                                  **kwargs)
+            else:
+                raise e
         node_graph = response.json()
 
         if paging:
@@ -649,7 +675,8 @@ class FbException(Exception):
         self.message = error_json['error']['message']
         self.type = error_json['error']['type']
         self.code = error_json['error']['code']
-        self.subcode = error_json['error']['error_subcode']
+        self.subcode = error_json['error'].get('error_subcode')
+        self.is_transient = error_json['error'].get('is_transient', False)
 
 
 if __name__ == '__main__':
