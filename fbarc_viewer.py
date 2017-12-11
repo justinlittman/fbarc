@@ -1,7 +1,7 @@
-from flask import Flask, redirect, url_for, abort, Response, stream_with_context
+from flask import Flask, redirect, url_for, abort, Response, stream_with_context, jsonify, render_template
 import os
 import json
-from collections import OrderedDict
+from collections import OrderedDict, Counter
 import itertools
 import fileinput
 import sys
@@ -11,6 +11,7 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'secret')
 
 nodes = {}
+stats_counter = Counter()
 first_node_id = None
 
 # Load only if FBARCH_FILE env variable is available.
@@ -20,6 +21,7 @@ if fbarch_filepath:
         for l in f:
             node = json.loads(l.rstrip('\n'))
             nodes[node['id']] = node
+            stats_counter[node['metadata']['type']] += 1
             if first_node_id is None:
                 first_node_id = node['id']
 
@@ -28,6 +30,17 @@ if fbarch_filepath:
 def home():
     return redirect(url_for('node', node_id=first_node_id))
 
+
+@app.route('/stats')
+def stats():
+    return render_template('stats.html', stats=stats_counter)
+
+
+@app.route('/<node_id>.json')
+def json_node(node_id):
+    if node_id not in nodes:
+        abort(404)
+    return jsonify(nodes[node_id])
 
 @app.route('/<node_id>')
 def node(node_id):
@@ -141,6 +154,7 @@ if __name__ == '__main__':
         node = json.loads(line)
         if 'id' in node:
             nodes[node['id']] = node
+            stats_counter[node['metadata']['type']] += 1
             if first_node_id is None:
                 first_node_id = node['id']
         else:

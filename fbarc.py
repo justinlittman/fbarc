@@ -144,6 +144,7 @@ def main():
         level=logging.DEBUG if args.debug else logging.INFO,
         format="%(asctime)s %(levelname)s %(message)s"
     )
+    logging.getLogger('urllib3').setLevel(logging.WARNING)
 
     if args.command is None:
         parser.print_help()
@@ -381,26 +382,38 @@ class Fbarc(object):
         Iterator for getting nodes, starting with the root node and proceeding
         for the specified number of levels of connected nodes.
         """
+        node_counter = collections.Counter()
         node_queue = collections.deque()
         node_queue.appendleft((root_node_id, root_definition_name, 1))
+        node_counter[root_definition_name] += 1
         retrieved_nodes = set()
         while node_queue:
             node_id, definition_name, level = node_queue.popleft()
+            node_counter[definition_name] += -1
             log.debug('Popped %s (%s) of the node queue (level %s). %s nodes left on the node queue.',
                       node_id, definition_name, level, len(node_queue))
             if node_id not in retrieved_nodes:
                 if definition_name is None or definition_name not in exclude_definition_names:
-                    log.info("Getting node %s (%s). %s nodes left.", node_id, definition_name, len(node_queue))
-                    node_graph = self.get_node(node_id, definition_name)
-                    if levels == 0 or level < levels:
-                        connected_nodes = self.find_connected_nodes(definition_name, node_graph,
-                                                                    default_only=False)
-                        log.debug("%s connected nodes found in %s and added to node queue.", len(connected_nodes),
-                                  node_id)
-                        for connected_node_id, connected_definition_name in connected_nodes:
-                            node_queue.append((connected_node_id, connected_definition_name, level + 1))
-                    retrieved_nodes.add(node_id)
-                    yield node_graph
+                    log.info("Getting node %s (%s). %s nodes left: %s", node_id, definition_name, len(node_queue),
+                             node_counter.most_common())
+                    try:
+                        node_graph = self.get_node(node_id, definition_name)
+                        if levels == 0 or level < levels:
+                            connected_nodes = self.find_connected_nodes(definition_name, node_graph,
+                                                                        default_only=False)
+                            log.debug("%s connected nodes found in %s and added to node queue.", len(connected_nodes),
+                                      node_id)
+                            for connected_node_id, connected_definition_name in connected_nodes:
+                                node_queue.append((connected_node_id, connected_definition_name, level + 1))
+                                node_counter[connected_definition_name] += 1
+                        retrieved_nodes.add(node_id)
+                        yield node_graph
+                    except FbException as e:
+                        # Sometimes get unexpected GraphMethodException: Unsupported get request.
+                        if e.code == 100 and e.subcode == 33:
+                            log.warn('Skipping %s due to unexpected GraphMethodException: %s', node_id, e)
+                        else:
+                            raise e
                 else:
                     log.debug('%s is an excluded node type definition (%s), so skipping.',
                               node_id, definition_name)
@@ -511,11 +524,13 @@ class Fbarc(object):
             fields.extend(definition.fields)
         for edge in definition.default_edges:
             fields.append(
-                '{}{{{}}}'.format(edge, self._prepare_field_param(definition.get_edge_type(edge))))
+                '{}.limit({}){{{}}}'.format(edge, 1000 if edge == 'comments' else 100,
+                                            self._prepare_field_param(definition.get_edge_type(edge))))
         if not default_only:
             for edge in definition.edges:
                 fields.append(
-                    '{}{{{}}}'.format(edge, self._prepare_field_param(definition.get_edge_type(edge))))
+                    '{}.limit({}){{{}}}'.format(edge, 1000 if edge == 'comments' else 100,
+                                                self._prepare_field_param(definition.get_edge_type(edge))))
         if 'id' not in fields:
             fields.insert(0, 'id')
         return ','.join(fields)
