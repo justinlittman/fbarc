@@ -15,7 +15,7 @@ stats_counter = Counter()
 first_node_id = None
 
 # Load only if FBARCH_FILE env variable is available.
-fbarch_filepath = os.environ.get('FBARCH_FILE')
+fbarch_filepath = os.environ.get('FBARC_FILE')
 if fbarch_filepath:
     with open(fbarch_filepath) as f:
         for l in f:

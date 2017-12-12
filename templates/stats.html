@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block body %}
+    <div class="container">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Node type</th>
+                    <th>Count</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for node_type, count in stats.most_common() %}
+                    <tr>
+                        <td>{{ node_type }}</td>
+                        <td>{{ count }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% endblock %}
