@@ -590,7 +590,7 @@ class Fbarc(object):
                 logging.error('received too many errors')
                 raise e
             else:
-                time.sleep(self.get_error_delay_secs)
+                time.sleep(self.get_error_delay_secs * try_count)
                 return self._perform_http_get(*args, paging=paging, use_token=use_token, try_count=try_count + 1,
                                               **kwargs)
         except requests.exceptions.HTTPError as e:
@@ -601,7 +601,7 @@ class Fbarc(object):
                     logging.error('received too many errors')
                     raise e
                 else:
-                    time.sleep(self.get_error_delay_secs)
+                    time.sleep(self.get_error_delay_secs * try_count)
                     return self._perform_http_get(*args, paging=paging, use_token=use_token, try_count=try_count + 1,
                                                   **kwargs)
             else:
@@ -615,7 +615,7 @@ class Fbarc(object):
                     logging.error('received too many errors')
                     raise e
                 else:
-                    time.sleep(self.get_error_delay_secs)
+                    time.sleep(self.get_error_delay_secs * try_count)
                     return self._perform_http_get(*args, paging=paging, use_token=use_token, try_count=try_count + 1,
                                                   **kwargs)
             else:
