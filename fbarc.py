@@ -593,6 +593,20 @@ class Fbarc(object):
                 time.sleep(self.get_error_delay_secs)
                 return self._perform_http_get(*args, paging=paging, use_token=use_token, try_count=try_count + 1,
                                               **kwargs)
+        except requests.exceptions.HTTPError as e:
+            # Handle (possibly) transient http errors
+            logging.error('caught http error %s on %s try', e, try_count)
+            if e.response.status_code in (503, 504):
+                if self.get_errors_limit == try_count:
+                    logging.error('received too many errors')
+                    raise e
+                else:
+                    time.sleep(self.get_error_delay_secs)
+                    return self._perform_http_get(*args, paging=paging, use_token=use_token, try_count=try_count + 1,
+                                                  **kwargs)
+            else:
+                raise e
+
         except FbException as e:
             # Handle transient facebook errors
             if e.is_transient:
