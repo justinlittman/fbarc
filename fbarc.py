@@ -32,7 +32,7 @@ else:
     # Python 3
     get_input = input
 
-GRAPH_URL = "https://graph.facebook.com"
+GRAPH_URL = "https://graph.facebook.com/v2.11"
 
 log = logging.getLogger(__name__)
 
@@ -425,11 +425,41 @@ class Fbarc(object):
         Gets a node graph as specified by the node type definition.
         """
         url, params = self._prepare_request(node_id, definition_name)
-        return self._perform_http_get(url, params=params, paging=True)
+        node_graph = self._perform_http_get(url, params=params)
 
-    def get_page(self, page_link, graph_fragment):
+        # Queue of pages to retrieve.
+        paging_queue = collections.deque(self.find_paging_links(node_graph))
+
+        # Retrieve pages. Note that additional pages may be appended to queue.
+        while paging_queue:
+            pages = []
+            for _ in range(min(50, len(paging_queue))):
+                page_link, graph_fragment = paging_queue.popleft()
+                pages.append((page_link, graph_fragment))
+            paging_queue.extend(self.get_page_batch(pages))
+
+        return node_graph
+
+    def get_page_batch(self, pages):
+        log.debug('Getting batch with %s pages', len(pages))
+        batch_list = []
+        for page_link, _ in pages:
+            batch_list.append({'method': 'GET', 'relative_url': page_link[len(GRAPH_URL) + 1:]})
+        data = {'batch': json.dumps(batch_list), 'include_headers': 'false'}
+        batch_json = self._perform_http_post(GRAPH_URL, data=data)
+
+        new_pages = []
+        for count, (_, graph_fragment) in enumerate(pages):
+            batch_item = batch_json[count]
+            body = json.loads(batch_item['body'])
+            if batch_item['code'] != 200:
+                raise FbException(body)
+            new_pages.extend(self.merge_page(body, graph_fragment))
+        return new_pages
+
+    def merge_page(self, page_fragment, graph_fragment):
         """
-        Retrieve a page specified by a page link and append to graph fragment.
+        Merge a page fragment into a graph fragment.
 
         The page graph fragment is searched for additional result pages and returned
         as a list of (page link, graph fragment).
@@ -454,10 +484,6 @@ class Fbarc(object):
         }
 
         """
-        log.debug("Getting page link: %s.", page_link)
-        # page_fragment = requests.get(page_link).json()
-        page_fragment = self._perform_http_get(page_link, use_token=False)
-
         pages = []
         # Look for paging in root of this graph fragment
         if 'paging' in page_fragment and 'next' in page_fragment['paging']:
@@ -567,7 +593,7 @@ class Fbarc(object):
                 definition_name).load_module(definition_name).definition)
         return self._definitions[definition_name]
 
-    def _perform_http_get(self, *args, paging=False, use_token=True, try_count=1, **kwargs):
+    def _perform_http_get(self, *args, use_token=True, try_count=1, **kwargs):
         # Optional delay
         if self.last_get:
             wait_secs = self.delay_secs - (datetime.now() - self.last_get).total_seconds()
@@ -591,8 +617,7 @@ class Fbarc(object):
                 raise e
             else:
                 time.sleep(self.get_error_delay_secs * try_count)
-                return self._perform_http_get(*args, paging=paging, use_token=use_token, try_count=try_count + 1,
-                                              **kwargs)
+                return self._perform_http_get(*args, use_token=use_token, try_count=try_count + 1, **kwargs)
         except requests.exceptions.HTTPError as e:
             # Handle (possibly) transient http errors
             logging.error('caught http error %s on %s try', e, try_count)
@@ -602,8 +627,7 @@ class Fbarc(object):
                     raise e
                 else:
                     time.sleep(self.get_error_delay_secs * try_count)
-                    return self._perform_http_get(*args, paging=paging, use_token=use_token, try_count=try_count + 1,
-                                                  **kwargs)
+                    return self._perform_http_get(*args, use_token=use_token, try_count=try_count + 1, **kwargs)
             else:
                 raise e
 
@@ -616,22 +640,63 @@ class Fbarc(object):
                     raise e
                 else:
                     time.sleep(self.get_error_delay_secs * try_count)
-                    return self._perform_http_get(*args, paging=paging, use_token=use_token, try_count=try_count + 1,
-                                                  **kwargs)
+                    return self._perform_http_get(*args, use_token=use_token, try_count=try_count + 1, **kwargs)
             else:
                 raise e
-        node_graph = response.json()
+        return response.json()
 
-        if paging:
-            # Queue of pages to retrieve.
-            paging_queue = collections.deque(self.find_paging_links(node_graph))
+    def _perform_http_post(self, *args, use_token=True, try_count=1, **kwargs):
+        # Optional delay
+        if self.last_get:
+            wait_secs = self.delay_secs - (datetime.now() - self.last_get).total_seconds()
+            if wait_secs > 0:
+                log.debug('Sleeping %s', wait_secs)
+                time.sleep(wait_secs)
+        self.last_get = datetime.now()
 
-            # Retrieve pages. Note that additional pages may be appended to queue.
-            while paging_queue:
-                page_link, graph_fragment = paging_queue.popleft()
-                paging_queue.extend(self.get_page(page_link, graph_fragment))
+        data = kwargs.pop('data', {})
+        if use_token:
+            data['access_token'] = self.token
 
-        return node_graph
+        try:
+            response = requests.post(data=data, *args, **kwargs)
+            raise_for_fb_exception(response)
+        except requests.exceptions.ConnectionError as e:
+            # Handle (possibly) transient connection errors
+            logging.error('caught connection error %s on %s try', e, try_count)
+            if self.get_errors_limit == try_count:
+                logging.error('received too many errors')
+                raise e
+            else:
+                time.sleep(self.get_error_delay_secs * try_count)
+                return self._perform_http_post(*args, use_token=use_token, try_count=try_count + 1, **kwargs)
+        except requests.exceptions.HTTPError as e:
+            # Handle (possibly) transient http errors
+            logging.error('caught http error %s on %s try', e, try_count)
+            if e.response.status_code in (503, 504):
+                if self.get_errors_limit == try_count:
+                    logging.error('received too many errors')
+                    raise e
+                else:
+                    time.sleep(self.get_error_delay_secs * try_count)
+                    return self._perform_http_post(*args, use_token=use_token, try_count=try_count + 1, **kwargs)
+            else:
+                raise e
+
+        except FbException as e:
+            # Handle transient facebook errors
+            if e.is_transient:
+                logging.error('caught facebook error %s on %s try', e, try_count)
+                if self.get_errors_limit == try_count:
+                    logging.error('received too many errors')
+                    raise e
+                else:
+                    time.sleep(self.get_error_delay_secs * try_count)
+                    return self._perform_http_post(*args, use_token=use_token, try_count=try_count + 1, **kwargs)
+            else:
+                raise e
+        return response.json()
+
 
     def find_paging_links(self, graph_fragment):
         """
