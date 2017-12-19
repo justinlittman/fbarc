@@ -418,8 +418,8 @@ class Fbarc(object):
                                     log.debug('%s found in %s', connected_node_id, node_id)
                                     node_queue.append((connected_node_id, connected_definition_name, level + 1))
                                     node_counter[connected_definition_name] += 1
-                        retrieved_nodes.add(node_id)
-                        yield node_graph
+                            retrieved_nodes.add(node_id)
+                            yield node_graph
                 except FbException as e:
                     # Sometimes get unexpected GraphMethodException: Unsupported get request.
                     if e.code == 100 and e.subcode == 33:
