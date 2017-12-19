@@ -21,7 +21,8 @@ if fbarch_filepath:
         for l in f:
             node = json.loads(l.rstrip('\n'))
             nodes[node['id']] = node
-            stats_counter[node['metadata']['type']] += 1
+            if 'metadata' in node:
+                stats_counter[node['metadata']['type']] += 1
             if first_node_id is None:
                 first_node_id = node['id']
 
@@ -154,7 +155,8 @@ if __name__ == '__main__':
         node = json.loads(line)
         if 'id' in node:
             nodes[node['id']] = node
-            stats_counter[node['metadata']['type']] += 1
+            if 'metadata' in node:
+                stats_counter[node['metadata']['type']] += 1
             if first_node_id is None:
                 first_node_id = node['id']
         else:
