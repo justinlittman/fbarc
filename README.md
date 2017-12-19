@@ -145,7 +145,8 @@ definition.
     python fbarc.py url page 1191441824276882
     
 ## Definitions
-Definitions specify what fields and connections will be returned for a node type.
+Definitions specify what fields and connections will be returned for a node type, as well as the
+size of node batches and edges.
 
 Definitions are represented as simple python configuration files stored in the `definitions`
 or `local_definitions` directories. Definitions in `definitions` are distributed with f(b)arc. 
@@ -155,14 +156,18 @@ with the same filename as a definition in `definitions` will take precedence.
 Here is an example definition for a Page:
 
     definition = {
-        'albums': {'edge_type': 'album'},
-        'bio': {},
-        likes': {'edge_type': 'page', 'follow_edge': False},
-        'name': {'default': True},
-        'workflows': {'omit': True},
+        'node_batch_size': 10,
+        'edge_size': 10,
+        'fields': {
+            'albums': {'edge_type': 'album'},
+            'bio': {},
+            likes': {'edge_type': 'page', 'follow_edge': False},
+            'name': {'default': True},
+            'workflows': {'omit': True},
+        }
     }
 
-A definition is a specified as a map of names to fields or edges to be retrieved for the node.
+`fields` is a map of names to fields or edges to be retrieved for the node.
 
 A name with an `edge_type` is an edge. The value of `edge_type` is the name of another definition.
 
@@ -178,6 +183,13 @@ If an edge has `follow_edge` set to `False` then only the default fields or edge
 for that edge. That edge will be omitted from recursive retrieval. For example, for a Page, the
 likes edge is set to not follow edges because this would cause retrieval of all pages that liked
 this page, which is not desired.
+
+`node_batch_size` and `edge_size` are optional; if omitted sensible defaults will be used. Node batch
+size determines how many nodes of that type will be requested at a time. A larger number reduces the
+number of requests to the API, speeding up retrieval. Edge size determines, when retrieving an edge, 
+how many nodes to retrieve. A larger number reduces the number of paging requests, speeding up retrieval.
+In some cases, limits for node batch size and edge size can be found in the documentation; in others,
+it must be found by trial and error.
 
 The `--template` and `--update` parameters of the metadata command can assist with creating definitions.
 `--template` will produce a definition for a node type that includes all possible fields or edges with 

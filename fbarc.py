@@ -33,6 +33,9 @@ else:
     get_input = input
 
 GRAPH_URL = "https://graph.facebook.com/v2.11"
+DEFAULT_EDGE_SIZE = 100
+DEFAULT_NODE_BATCH_SIZE = 20
+PAGE_BATCH_SIZE = 50
 
 log = logging.getLogger(__name__)
 
@@ -181,11 +184,13 @@ def main():
                 if args.update:
                     node_type, fields, connections = fb.get_parsed_metadata(args.node)
                     fields.extend(connections)
-                    print_definition_map(update_definition_map(fb.get_definition(node_type).definition_map, fields))
+                    definition = fb.get_definition(node_type)
+                    print_definition_map(update_definition_map(definition.definition_map, fields),
+                                         definition.node_batch_size, definition.edge_size)
                 elif args.template:
                     _, fields, connections = fb.get_parsed_metadata(args.node)
                     fields.extend(connections)
-                    print_definition_map(definition_map_template(fields))
+                    print_definition_map(definition_map_template(fields), None, None)
                 else:
                     print_graph(fb.get_metadata(args.node), pretty=args.pretty)
             elif args.command == 'search':
@@ -228,15 +233,21 @@ def print_graphs(graph_iter, pretty=False):
         print_graph(graph, pretty)
 
 
-def print_definition_map(definition_map):
+def print_definition_map(definition_map, node_batch_size, edge_size):
     print('definition = {')
+    if node_batch_size and node_batch_size != DEFAULT_NODE_BATCH_SIZE:
+        print('    \'node_batch_size\': {},'.format(node_batch_size))
+    if edge_size and edge_size != DEFAULT_EDGE_SIZE:
+        print('    \'node_batch_size\': {},'.format(node_batch_size))
     definition_map.pop('id', None)
+    print('    \'fields\': {')
     for name in sorted(definition_map.keys()):
         field_definition = definition_map[name]
         if 'comment' in field_definition:
             comment = field_definition.pop('comment')
-            print('    # {}'.format(comment))
-        print('    \'{}\': {},'.format(name, field_definition))
+            print('        # {}'.format(comment))
+        print('        \'{}\': {},'.format(name, field_definition))
+    print('    }')
     print('}')
 
 
@@ -370,7 +381,7 @@ class Fbarc(object):
         Returns the url for retrieving the specified node from the Graph API
         given the node type definition.
         """
-        url, params = self._prepare_request(node_id, definition_name)
+        url, params = self._prepare_node_request(node_id, definition_name)
         if not escape:
             return '{}?{}'.format(url, '&'.join(['{}={}'.format(k, v) for k, v in params.items()]))
         else:
@@ -387,44 +398,64 @@ class Fbarc(object):
         node_queue.appendleft((root_node_id, root_definition_name, 1))
         node_counter[root_definition_name] += 1
         retrieved_nodes = set()
-        while node_queue:
-            node_id, definition_name, level = node_queue.popleft()
-            node_counter[definition_name] += -1
-            log.debug('Popped %s (%s) of the node queue (level %s). %s nodes left on the node queue.',
-                      node_id, definition_name, level, len(node_queue))
-            if node_id not in retrieved_nodes:
-                if definition_name is None or definition_name not in exclude_definition_names:
-                    log.info("Getting node %s (%s). %s nodes left: %s", node_id, definition_name, len(node_queue),
-                             node_counter.most_common())
-                    try:
-                        node_graph = self.get_node(node_id, definition_name)
-                        if levels == 0 or level < levels:
+        for node_ids, definition_name, level in self.node_queue_iter(node_queue):
+            node_counter[definition_name] -= len(node_ids)
+            log.debug('Popped %s %s nodes off node queue (level %s). %s nodes left on the node queue.',
+                      len(node_ids), definition_name, level, len(node_queue))
+            if definition_name is None or definition_name not in exclude_definition_names:
+                log.info("Getting nodes %s (%s). %s nodes left: %s", node_ids, definition_name, len(node_queue),
+                         node_counter.most_common())
+                try:
+                    node_graph_dict = self.get_node_batch(node_ids, definition_name)
+                    if levels == 0 or level < levels:
+                        for node_id, node_graph in node_graph_dict.items():
                             connected_nodes = self.find_connected_nodes(definition_name, node_graph,
                                                                         default_only=False)
                             log.debug("%s connected nodes found in %s and added to node queue.", len(connected_nodes),
                                       node_id)
                             for connected_node_id, connected_definition_name in connected_nodes:
-                                node_queue.append((connected_node_id, connected_definition_name, level + 1))
-                                node_counter[connected_definition_name] += 1
+                                if connected_node_id not in retrieved_nodes:
+                                    log.debug('%s found in %s', connected_node_id, node_id)
+                                    node_queue.append((connected_node_id, connected_definition_name, level + 1))
+                                    node_counter[connected_definition_name] += 1
                         retrieved_nodes.add(node_id)
                         yield node_graph
-                    except FbException as e:
-                        # Sometimes get unexpected GraphMethodException: Unsupported get request.
-                        if e.code == 100 and e.subcode == 33:
-                            log.warn('Skipping %s due to unexpected GraphMethodException: %s', node_id, e)
-                        else:
-                            raise e
-                else:
-                    log.debug('%s is an excluded node type definition (%s), so skipping.',
-                              node_id, definition_name)
+                except FbException as e:
+                    # Sometimes get unexpected GraphMethodException: Unsupported get request.
+                    if e.code == 100 and e.subcode == 33:
+                        log.warn('Skipping %s due to unexpected GraphMethodException: %s', node_id, e)
+                    else:
+                        raise e
             else:
-                log.debug('%s has already been retrieved, so skipping.', node_id)
+                log.debug('%s is an excluded node type definition (%s), so skipping.',
+                          node_id, definition_name)
+
+    @staticmethod
+    def node_queue_iter(node_queue):
+        """
+        Returns the next list of nodes, node definition, level where the node definition
+        and level is the same for all nodes.
+
+        The maximum number of nodes that will be returned is 50.
+        """
+        node_ids = []
+        while node_queue:
+            pop_node_id, pop_definition_name, pop_level = node_queue.popleft()
+            node_ids.append(pop_node_id)
+
+            peak_definition_name = None
+            peak_level = None
+            if node_queue:
+                _, peak_definition_name, peak_level = node_queue[0]
+            if peak_definition_name != pop_definition_name or peak_level != pop_level or len(node_ids) == 50:
+                yield node_ids, pop_definition_name, pop_level
+                node_ids = []
 
     def get_node(self, node_id, definition_name):
         """
         Gets a node graph as specified by the node type definition.
         """
-        url, params = self._prepare_request(node_id, definition_name)
+        url, params = self._prepare_node_request(node_id, definition_name)
         node_graph = self._perform_http_get(url, params=params)
 
         # Queue of pages to retrieve.
@@ -433,12 +464,39 @@ class Fbarc(object):
         # Retrieve pages. Note that additional pages may be appended to queue.
         while paging_queue:
             pages = []
-            for _ in range(min(50, len(paging_queue))):
+            for _ in range(min(PAGE_BATCH_SIZE, len(paging_queue))):
                 page_link, graph_fragment = paging_queue.popleft()
                 pages.append((page_link, graph_fragment))
             paging_queue.extend(self.get_page_batch(pages))
 
         return node_graph
+
+    def get_node_batch(self, node_ids, definition_name):
+        """
+        Gets a node graphs for a list of nodes as specified by the node type definition.
+        """
+        url, params = self._prepare_nodes_request(node_ids, definition_name)
+        # Returns a map of ids to graphs
+        nodes_graph_dict = self._perform_http_get(url, params=params)
+
+        for node_id in node_ids:
+            if node_id in nodes_graph_dict:
+                # Queue of pages to retrieve.
+                paging_queue = collections.deque(self.find_paging_links(nodes_graph_dict[node_id]))
+            else:
+                log.warn('Node %s is missing or not permitted, so skipping.', node_id)
+
+        definition = self.get_definition(definition_name)
+
+        # Retrieve pages. Note that additional pages may be appended to queue.
+        while paging_queue:
+            pages = []
+            for _ in range(min(definition.node_batch_size, len(paging_queue))):
+                page_link, graph_fragment = paging_queue.popleft()
+                pages.append((page_link, graph_fragment))
+            paging_queue.extend(self.get_page_batch(pages))
+
+        return nodes_graph_dict
 
     def get_page_batch(self, pages):
         log.debug('Getting batch with %s pages', len(pages))
@@ -518,9 +576,9 @@ class Fbarc(object):
         """
         return self.get_metadata(node_id)['metadata']['type']
 
-    def _prepare_request(self, node_id, definition_name):
+    def _prepare_node_request(self, node_id, definition_name):
         """
-        Prepare the request url and params.
+        Prepare the request url and params for a single node.
 
         The access token is not included in the params.
         """
@@ -529,6 +587,19 @@ class Fbarc(object):
             'fields': self._prepare_field_param(definition_name, default_only=False)
         }
         return self._prepare_url(node_id), params
+
+    def _prepare_nodes_request(self, node_ids, definition_name):
+        """
+        Prepare the request url and params for multiple nodes.
+
+        The access token is not included in the params.
+        """
+        params = {
+            'ids': ','.join(node_ids),
+            'metadata': 1,
+            'fields': self._prepare_field_param(definition_name, default_only=False)
+        }
+        return GRAPH_URL, params
 
     @staticmethod
     def _prepare_url(node_id):
@@ -550,12 +621,12 @@ class Fbarc(object):
             fields.extend(definition.fields)
         for edge in definition.default_edges:
             fields.append(
-                '{}.limit({}){{{}}}'.format(edge, 1000 if edge == 'comments' else 100,
+                '{}.limit({}){{{}}}'.format(edge, definition.edge_size,
                                             self._prepare_field_param(definition.get_edge_type(edge))))
         if not default_only:
             for edge in definition.edges:
                 fields.append(
-                    '{}.limit({}){{{}}}'.format(edge, 1000 if edge == 'comments' else 100,
+                    '{}.limit({}){{{}}}'.format(edge, definition.edge_size,
                                                 self._prepare_field_param(definition.get_edge_type(edge))))
         if 'id' not in fields:
             fields.insert(0, 'id')
@@ -697,7 +768,6 @@ class Fbarc(object):
                 raise e
         return response.json()
 
-
     def find_paging_links(self, graph_fragment):
         """
         Returns a list of (link, graph locations) found in a graph fragment.
@@ -733,8 +803,10 @@ class Fbarc(object):
 
 
 class Definition:
-    def __init__(self, definition_map):
-        self.definition_map = definition_map
+    def __init__(self, definition_obj):
+        self.definition_map = definition_obj['fields']
+        self.node_batch_size = definition_obj.get('node_batch_size', DEFAULT_NODE_BATCH_SIZE)
+        self.edge_size = definition_obj.get('edge_size', DEFAULT_EDGE_SIZE)
         default_fields_set = set()
         fields_set = set()
         default_edges_set = set()
@@ -765,10 +837,10 @@ class Definition:
 
 class FbException(Exception):
     def __init__(self, error_json):
-        super(FbException, self).__init__(error_json['error']['message'])
-        self.message = error_json['error']['message']
-        self.type = error_json['error']['type']
-        self.code = error_json['error']['code']
+        super(FbException, self).__init__(error_json['error'].get('message'))
+        self.message = error_json['error'].get('message')
+        self.type = error_json['error'].get('type')
+        self.code = error_json['error'].get('code')
         self.subcode = error_json['error'].get('error_subcode')
         self.is_transient = error_json['error'].get('is_transient', False)
 
