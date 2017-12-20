@@ -479,10 +479,12 @@ class Fbarc(object):
         # Returns a map of ids to graphs
         nodes_graph_dict = self._perform_http_get(url, params=params)
 
+        paging_queue = collections.deque()
+
         for node_id in node_ids:
             if node_id in nodes_graph_dict:
                 # Queue of pages to retrieve.
-                paging_queue = collections.deque(self.find_paging_links(nodes_graph_dict[node_id]))
+                paging_queue.extend(self.find_paging_links(nodes_graph_dict[node_id]))
             else:
                 log.warn('Node %s is missing or not permitted, so skipping.', node_id)
 
