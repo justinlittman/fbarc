@@ -673,6 +673,7 @@ class Fbarc(object):
                 time.sleep(wait_secs)
         self.last_get = datetime.now()
 
+        url = args[0]
         params = kwargs.pop('params', {})
         if use_token:
             params['access_token'] = self.token
@@ -684,7 +685,7 @@ class Fbarc(object):
             # Handle (possibly) transient connection errors
             logging.error('caught connection error %s on %s try', e, try_count)
             if self.get_errors_limit == try_count:
-                logging.error('received too many errors')
+                logging.error('received too many errors for %s (%s)', url, params)
                 raise e
             else:
                 time.sleep(self.get_error_delay_secs * try_count)
@@ -694,7 +695,7 @@ class Fbarc(object):
             logging.error('caught http error %s on %s try', e, try_count)
             if e.response.status_code in (503, 504):
                 if self.get_errors_limit == try_count:
-                    logging.error('received too many errors')
+                    logging.error('received too many errors for %s (%s)', url, params)
                     raise e
                 else:
                     time.sleep(self.get_error_delay_secs * try_count)
@@ -703,8 +704,9 @@ class Fbarc(object):
                 raise e
 
         except FbException as e:
-            # Handle transient facebook errors
-            if e.is_transient:
+            # Handle transient facebook errors and unexpected GraphMethodException: Unsupported get request.
+            # Seem that this GraphMethodException may be transient.
+            if e.is_transient or (e.code == 100 and e.subcode == 33):
                 logging.error('caught facebook error %s on %s try', e, try_count)
                 if self.get_errors_limit == try_count:
                     logging.error('received too many errors')
@@ -725,6 +727,7 @@ class Fbarc(object):
                 time.sleep(wait_secs)
         self.last_get = datetime.now()
 
+        url = args[0]
         data = kwargs.pop('data', {})
         if use_token:
             data['access_token'] = self.token
@@ -736,7 +739,7 @@ class Fbarc(object):
             # Handle (possibly) transient connection errors
             logging.error('caught connection error %s on %s try', e, try_count)
             if self.get_errors_limit == try_count:
-                logging.error('received too many errors')
+                logging.error('received too many errors for %s (%s)', url, data)
                 raise e
             else:
                 time.sleep(self.get_error_delay_secs * try_count)
@@ -746,7 +749,7 @@ class Fbarc(object):
             logging.error('caught http error %s on %s try', e, try_count)
             if e.response.status_code in (503, 504):
                 if self.get_errors_limit == try_count:
-                    logging.error('received too many errors')
+                    logging.error('received too many errors for %s (%s)', url, data)
                     raise e
                 else:
                     time.sleep(self.get_error_delay_secs * try_count)
@@ -755,11 +758,12 @@ class Fbarc(object):
                 raise e
 
         except FbException as e:
-            # Handle transient facebook errors
-            if e.is_transient:
+            # Handle transient facebook errors and unexpected GraphMethodException: Unsupported get request.
+            # Seem that this GraphMethodException may be transient.
+            if e.is_transient or (e.code == 100 and e.subcode == 33):
                 logging.error('caught facebook error %s on %s try', e, try_count)
                 if self.get_errors_limit == try_count:
-                    logging.error('received too many errors')
+                    logging.error('received too many errors for %s (%s)', url, data)
                     raise e
                 else:
                     time.sleep(self.get_error_delay_secs * try_count)
