@@ -1,5 +1,4 @@
 definition = {
-    'node_batch_size': 50,
     'fields': {
         'actions': {'omit': True},
         'admin_creator': {'omit': True},
@@ -52,7 +51,8 @@ definition = {
         'scheduled_publish_time': {'omit': True},
         'seen': {'omit': True},
         'sharedposts': {'omit': True},
-        'shares': {},
+        # For some reason, shares are causing (#2) Service temporarily unavailable on some posts.
+        'shares': {'omit': True},
         'source': {},
         'sponsor_tags': {'omit': True},
         'status_type': {'default': True},

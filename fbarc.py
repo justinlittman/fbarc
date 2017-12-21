@@ -351,11 +351,12 @@ def get_token_expires_at(app_token, token):
     return datetime.fromtimestamp(response.json()['data']['expires_at'], timezone.utc)
 
 
-def raise_for_fb_exception(response):
+def raise_for_fb_exception(response, data=None, params=None):
     if response.status_code != requests.codes.ok:
         try:
             error_response = response.json()
-            log.error(json.dumps(error_response, indent=4))
+            log.error('Error for %s (%s): %s', response.request.url, data or params or 'No data or params provided',
+                      json.dumps(error_response, indent=4))
             raise FbException(error_response)
         except json.decoder.JSONDecodeError:
             response.raise_for_status()
@@ -400,38 +401,32 @@ class Fbarc(object):
         retrieved_nodes = set()
         for node_ids, definition_name, level in self.node_queue_iter(node_queue):
             node_counter[definition_name] -= len(node_ids)
-            log.debug('Popped %s %s nodes off node queue (level %s). %s nodes left on the node queue.',
-                      len(node_ids), definition_name, level, len(node_queue))
-            if definition_name is None or definition_name not in exclude_definition_names:
-                log.info("Getting nodes %s (%s). %s nodes left: %s", node_ids, definition_name, len(node_queue),
-                         node_counter.most_common())
-                try:
-                    node_graph_dict = self.get_node_batch(node_ids, definition_name)
-                    if levels == 0 or level < levels:
-                        for node_id, node_graph in node_graph_dict.items():
-                            connected_nodes = self.find_connected_nodes(definition_name, node_graph,
-                                                                        default_only=False)
-                            log.debug("%s connected nodes found in %s and added to node queue.", len(connected_nodes),
-                                      node_id)
-                            for connected_node_id, connected_definition_name in connected_nodes:
-                                if connected_node_id not in retrieved_nodes:
-                                    log.debug('%s found in %s', connected_node_id, node_id)
-                                    node_queue.append((connected_node_id, connected_definition_name, level + 1))
-                                    node_counter[connected_definition_name] += 1
-                            retrieved_nodes.add(node_id)
-                            yield node_graph
-                except FbException as e:
-                    # Sometimes get unexpected GraphMethodException: Unsupported get request.
-                    if e.code == 100 and e.subcode == 33:
-                        log.warn('Skipping %s due to unexpected GraphMethodException: %s', node_id, e)
-                    else:
-                        raise e
-            else:
-                log.debug('%s is an excluded node type definition (%s), so skipping.',
-                          node_id, definition_name)
+            log.info("Getting nodes %s (%s). %s nodes left: %s", node_ids, definition_name, len(node_queue),
+                     node_counter.most_common())
+            try:
+                node_graph_dict = self.get_node_batch(node_ids, definition_name)
+                if levels == 0 or level < levels:
+                    for node_id, node_graph in node_graph_dict.items():
+                        connected_nodes = self.find_connected_nodes(definition_name, node_graph,
+                                                                    default_only=False)
+                        log.debug("%s connected nodes found in %s and added to node queue.", len(connected_nodes),
+                                  node_id)
+                        for connected_node_id, connected_definition_name in connected_nodes:
+                            if connected_node_id not in retrieved_nodes and (
+                                            definition_name is None or definition_name not in exclude_definition_names):
+                                log.debug('%s found in %s', connected_node_id, node_id)
+                                node_queue.append((connected_node_id, connected_definition_name, level + 1))
+                                node_counter[connected_definition_name] += 1
+                        retrieved_nodes.add(node_id)
+                        yield node_graph
+            except FbException as e:
+                # Sometimes get unexpected GraphMethodException: Unsupported get request.
+                if e.code == 100 and e.subcode == 33:
+                    log.warn('Skipping %s due to unexpected GraphMethodException: %s', node_id, e)
+                else:
+                    raise e
 
-    @staticmethod
-    def node_queue_iter(node_queue):
+    def node_queue_iter(self, node_queue):
         """
         Returns the next list of nodes, node definition, level where the node definition
         and level is the same for all nodes.
@@ -442,12 +437,13 @@ class Fbarc(object):
         while node_queue:
             pop_node_id, pop_definition_name, pop_level = node_queue.popleft()
             node_ids.append(pop_node_id)
-
+            pop_definition = self.get_definition(pop_definition_name)
             peak_definition_name = None
             peak_level = None
             if node_queue:
                 _, peak_definition_name, peak_level = node_queue[0]
-            if peak_definition_name != pop_definition_name or peak_level != pop_level or len(node_ids) == 50:
+            if peak_definition_name != pop_definition_name or peak_level != pop_level or len(
+                    node_ids) == pop_definition.node_batch_size:
                 yield node_ids, pop_definition_name, pop_level
                 node_ids = []
 
@@ -456,7 +452,9 @@ class Fbarc(object):
         Gets a node graph as specified by the node type definition.
         """
         url, params = self._prepare_node_request(node_id, definition_name)
-        node_graph = self._perform_http_get(url, params=params)
+        # Using post because querystring might be huge.
+        params['method'] = 'GET'
+        node_graph = self._perform_http_post(url, data=params)
 
         # Queue of pages to retrieve.
         paging_queue = collections.deque(self.find_paging_links(node_graph))
@@ -476,8 +474,10 @@ class Fbarc(object):
         Gets a node graphs for a list of nodes as specified by the node type definition.
         """
         url, params = self._prepare_nodes_request(node_ids, definition_name)
+        # Using post because querystring might be huge.
+        params['method'] = 'GET'
         # Returns a map of ids to graphs
-        nodes_graph_dict = self._perform_http_get(url, params=params)
+        nodes_graph_dict = self._perform_http_post(url, data=params)
 
         paging_queue = collections.deque()
 
@@ -509,10 +509,11 @@ class Fbarc(object):
         batch_json = self._perform_http_post(GRAPH_URL, data=data)
 
         new_pages = []
-        for count, (_, graph_fragment) in enumerate(pages):
+        for count, (page_link, graph_fragment) in enumerate(pages):
             batch_item = batch_json[count]
             body = json.loads(batch_item['body'])
             if batch_item['code'] != 200:
+                log.error('Error for page %s: %s', page_link, json.dumps(body, indent=4))
                 raise FbException(body)
             new_pages.extend(self.merge_page(body, graph_fragment))
         return new_pages
@@ -682,7 +683,7 @@ class Fbarc(object):
 
         try:
             response = requests.get(params=params, *args, **kwargs)
-            raise_for_fb_exception(response)
+            raise_for_fb_exception(response, params=params)
         except requests.exceptions.ConnectionError as e:
             # Handle (possibly) transient connection errors
             logging.error('caught connection error %s on %s try', e, try_count)
@@ -691,7 +692,8 @@ class Fbarc(object):
                 raise e
             else:
                 time.sleep(self.get_error_delay_secs * try_count)
-                return self._perform_http_get(*args, use_token=use_token, try_count=try_count + 1, **kwargs)
+                return self._perform_http_get(*args, use_token=use_token, try_count=try_count + 1, params=params,
+                                              **kwargs)
         except requests.exceptions.HTTPError as e:
             # Handle (possibly) transient http errors
             logging.error('caught http error %s on %s try', e, try_count)
@@ -701,7 +703,8 @@ class Fbarc(object):
                     raise e
                 else:
                     time.sleep(self.get_error_delay_secs * try_count)
-                    return self._perform_http_get(*args, use_token=use_token, try_count=try_count + 1, **kwargs)
+                    return self._perform_http_get(*args, use_token=use_token, try_count=try_count + 1, params=params,
+                                                  **kwargs)
             else:
                 raise e
 
@@ -715,7 +718,8 @@ class Fbarc(object):
                     raise e
                 else:
                     time.sleep(self.get_error_delay_secs * try_count)
-                    return self._perform_http_get(*args, use_token=use_token, try_count=try_count + 1, **kwargs)
+                    return self._perform_http_get(*args, use_token=use_token, try_count=try_count + 1, params=params,
+                                                  **kwargs)
             else:
                 raise e
         return response.json()
@@ -736,7 +740,7 @@ class Fbarc(object):
 
         try:
             response = requests.post(data=data, *args, **kwargs)
-            raise_for_fb_exception(response)
+            raise_for_fb_exception(response, data=data)
         except requests.exceptions.ConnectionError as e:
             # Handle (possibly) transient connection errors
             logging.error('caught connection error %s on %s try', e, try_count)
@@ -745,7 +749,7 @@ class Fbarc(object):
                 raise e
             else:
                 time.sleep(self.get_error_delay_secs * try_count)
-                return self._perform_http_post(*args, use_token=use_token, try_count=try_count + 1, **kwargs)
+                return self._perform_http_post(*args, use_token=use_token, try_count=try_count + 1, data=data, **kwargs)
         except requests.exceptions.HTTPError as e:
             # Handle (possibly) transient http errors
             logging.error('caught http error %s on %s try', e, try_count)
@@ -755,7 +759,8 @@ class Fbarc(object):
                     raise e
                 else:
                     time.sleep(self.get_error_delay_secs * try_count)
-                    return self._perform_http_post(*args, use_token=use_token, try_count=try_count + 1, **kwargs)
+                    return self._perform_http_post(*args, use_token=use_token, try_count=try_count + 1, data=data,
+                                                   **kwargs)
             else:
                 raise e
 
@@ -769,7 +774,8 @@ class Fbarc(object):
                     raise e
                 else:
                     time.sleep(self.get_error_delay_secs * try_count)
-                    return self._perform_http_post(*args, use_token=use_token, try_count=try_count + 1, **kwargs)
+                    return self._perform_http_post(*args, use_token=use_token, try_count=try_count + 1, data=data,
+                                                   **kwargs)
             else:
                 raise e
         return response.json()
