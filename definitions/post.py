@@ -1,4 +1,5 @@
 definition = {
+    'edge_size': 50,
     'fields': {
         'actions': {'omit': True},
         'admin_creator': {'omit': True},

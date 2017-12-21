@@ -622,15 +622,15 @@ class Fbarc(object):
         fields.extend(definition.default_fields)
         if not default_only:
             fields.extend(definition.fields)
-        for edge in definition.default_edges:
-            fields.append(
-                '{}.limit({}){{{}}}'.format(edge, definition.edge_size,
-                                            self._prepare_field_param(definition.get_edge_type(edge))))
+        edges = list(definition.default_edges)
         if not default_only:
-            for edge in definition.edges:
-                fields.append(
-                    '{}.limit({}){{{}}}'.format(edge, definition.edge_size,
-                                                self._prepare_field_param(definition.get_edge_type(edge))))
+            edges.extend(definition.edges)
+        for edge in edges:
+            edge_type = definition.get_edge_type(edge)
+            edge_definition = self.get_definition(edge_type)
+            fields.append(
+                '{}.limit({}){{{}}}'.format(edge, edge_definition.edge_size,
+                                            self._prepare_field_param(edge_type)))
         if 'id' not in fields:
             fields.insert(0, 'id')
         return ','.join(fields)
