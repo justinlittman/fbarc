@@ -405,20 +405,23 @@ class Fbarc(object):
                      node_counter.most_common())
             try:
                 node_graph_dict = self.get_node_batch(node_ids, definition_name)
-                if levels == 0 or level < levels:
-                    for node_id, node_graph in node_graph_dict.items():
+                for node_id, node_graph in node_graph_dict.items():
+                    retrieved_nodes.add(node_id)
+                    if levels == 0 or level < levels:
                         connected_nodes = self.find_connected_nodes(definition_name, node_graph,
                                                                     default_only=False)
-                        log.debug("%s connected nodes found in %s and added to node queue.", len(connected_nodes),
-                                  node_id)
+                        added_count = 0
                         for connected_node_id, connected_definition_name in connected_nodes:
                             if connected_node_id not in retrieved_nodes and (
-                                            definition_name is None or definition_name not in exclude_definition_names):
+                                            connected_definition_name is None or
+                                            connected_definition_name not in exclude_definition_names):
                                 log.debug('%s found in %s', connected_node_id, node_id)
                                 node_queue.append((connected_node_id, connected_definition_name, level + 1))
                                 node_counter[connected_definition_name] += 1
-                        retrieved_nodes.add(node_id)
-                        yield node_graph
+                                added_count += 1
+                        log.debug("%s connected nodes found in %s and %s added to node queue.", len(connected_nodes),
+                                  node_id, added_count)
+                    yield node_graph
             except FbException as e:
                 # Sometimes get unexpected GraphMethodException: Unsupported get request.
                 if e.code == 100 and e.subcode == 33:

@@ -106,10 +106,8 @@ definition = {
         'leadgen_whitelisted_users': {'omit': True},
         'likes': {'edge_type': 'page', 'follow_edge': False},
         'link': {'default': True},
-        # Added field
         'live_encoders': {'omit': True},
-        # Added field
-        'live_videos': {'omit': True},
+        'live_videos': {'edge_type': 'livevideo'},
         'location': {},
         'locations': {'omit': True},
         'media_fingerprints': {'omit': True},

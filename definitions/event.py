@@ -21,8 +21,7 @@ definition = {
         'is_draft': {'omit': True},
         'is_page_owned': {'omit': True},
         'is_viewer_admin': {'omit': True},
-        # Added field
-        'live_videos': {'omit': True},
+        'live_videos': {'edge_type': 'livevideo'},
         'maybe': {'omit': True},
         'maybe_count': {},
         'name': {'default': True},
