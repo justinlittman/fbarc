@@ -122,10 +122,10 @@ def render_dict(dict_obj, counter):
 
         if collapsible:
             item_id = 'item_{}'.format(next(counter))
-            yield '<a data-toggle="collapse" href="#{}" aria-expanded="false" aria-controls="{}">'.format(item_id, item_id)
+            yield '<a data-toggle="collapse" data-target="#{}" aria-expanded="false" aria-controls="{}"><u>'.format(item_id, item_id)
         yield key
         if collapsible:
-            yield '</a>'
+            yield '</u></a>'
         yield '</b>: '
         if isinstance(value, list):
             yield '<span class="badge badge-info">{}</span>'.format(len(value))
@@ -162,5 +162,4 @@ if __name__ == '__main__':
         else:
             print('Error line: {}'.format(line))
             sys.exit(1)
-
     app.run()
