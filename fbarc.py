@@ -14,6 +14,7 @@ import copy
 from datetime import datetime, timedelta, timezone
 import iso8601
 import time
+import fileinput
 
 import definitions
 import local_definitions
@@ -178,6 +179,7 @@ def main():
         else:
             token = get_app_token(app_id, app_secret)
             print('Warning: Using an app token. You may encounter authorization problems.', file=sys.stderr)
+        node_id = None
         try:
             fb = Fbarc(token=token, delay_secs=args.delay)
             if args.command == 'metadata':
@@ -192,21 +194,45 @@ def main():
                     fields.extend(connections)
                     print_definition_map(definition_map_template(fields), None, None)
                 else:
-                    print_graph(fb.get_metadata(args.node), pretty=args.pretty)
+                    node_id = args.node
+                    print_graph(fb.get_metadata(node_id), pretty=args.pretty)
             elif args.command == 'search':
                 print_graph(fb.search(args.node_type, args.query))
+            elif args.command == 'graphs':
+                for line in fileinput.input(files=args.node_files if len(args.node_files) > 0 else ('-',)):
+                    node_id = line.rstrip('\n')
+                    graph_command(args.definition, node_id, args.levels, args.exclude, args.pretty,
+                                  args.output_dir, fb)
             else:
-                definition_name = args.definition
-                if definition_name == 'discover':
-                    definition_name = fb.discover_type(args.node)
-
-                print_graphs(fb.get_nodes(args.node, definition_name, levels=args.levels,
-                                          exclude_definition_names=args.exclude), pretty=args.pretty)
+                node_id = args.node
+                graph_command(args.definition, node_id, args.levels, args.exclude, args.pretty, args.output_dir, fb)
         except FbException as e:
-            print('Error: {}'.format(e.message), file=sys.stderr)
+            error_msg = 'Error:'
+            if node_id:
+                error_msg = 'Error processing {}'.format(node_id)
+            print('{}: {}'.format(error_msg, e.message), file=sys.stderr)
             if e.code == 100:
                 print('Hint: Use a user token instead of an app token. See README for explanation.', file=sys.stderr)
             quit(1)
+
+
+def graph_command(definition_name, node_id, levels, exclude_definition_name, pretty, output_dir, fb):
+    if definition_name == 'discover':
+        definition_name = fb.discover_type(node_id)
+
+    output_file = None
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+        output_filepath = os.path.join(output_dir, '{}.jsonl'.format(node_id))
+        output_file = open(output_filepath, 'w')
+    try:
+        print('Getting graph for node {}'.format(node_id), file=sys.stderr)
+        print_graphs(fb.get_nodes(node_id, definition_name, levels=levels,
+                                  exclude_definition_names=exclude_definition_name), pretty=pretty,
+                     file=output_file or sys.stdout)
+    finally:
+        if output_file:
+            output_file.close()
 
 
 def update_definition_map(definition_map, field_names):
@@ -224,13 +250,13 @@ def definition_map_template(field_names):
     return definition_map
 
 
-def print_graph(graph, pretty=False):
-    print(json.dumps(graph, indent=4 if pretty else None))
+def print_graph(graph, pretty=False, file=sys.stdout):
+    print(json.dumps(graph, indent=4 if pretty else None), file=file)
 
 
-def print_graphs(graph_iter, pretty=False):
+def print_graphs(graph_iter, pretty=False, file=sys.stdout):
     for graph in graph_iter:
-        print_graph(graph, pretty)
+        print_graph(graph, pretty, file)
 
 
 def print_definition_map(definition_map, node_batch_size, edge_size):
@@ -293,6 +319,20 @@ def get_argparser():
     graph_parser.add_argument('--exclude', nargs='+', choices=list(definition_importers.keys()),
                               help='node type definitions to exclude from recursive retrieval', default=[])
     graph_parser.add_argument('--pretty', action='store_true', help='pretty print output')
+    graph_parser.add_argument('--output-dir', help='write output to file in this directory')
+
+    graphs_parser = subparsers.add_parser('graphs', help='retrieve multiple nodes from the Graph API')
+    graphs_parser.add_argument('definition', choices=definition_choices,
+                               help='definition to use to retrieve the node. discover will discover node type '
+                                    'from API.')
+    graphs_parser.add_argument('node_files', metavar='FILE', nargs='*',
+                               help='files containing node ids to read, if empty, stdin is used')
+    graphs_parser.add_argument('--levels', type=int, default='1',
+                               help='number of levels of nodes to retrieve (default=1, infinite=0)')
+    graphs_parser.add_argument('--exclude', nargs='+', choices=list(definition_importers.keys()),
+                               help='node type definitions to exclude from recursive retrieval', default=[])
+    graphs_parser.add_argument('--pretty', action='store_true', help='pretty print output')
+    graphs_parser.add_argument('--output-dir', help='write output to files in this directory')
 
     metadata_parser = subparsers.add_parser('metadata', help='retrieve metadata for a node from the Graph API')
     metadata_parser.add_argument('node', help='identify node to retrieve by providing node id, username, or Facebook '

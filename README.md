@@ -108,7 +108,8 @@ retrieve and store a long-lived access token. You can get a short-lived access t
 F(b)arc will warn you when you're long-lived user access token is going to expire.
 
 ### Graph
-The graph command will retrieve the graph for a node. The node is identified by a node id (e.g., 1191441824276882),
+The graph command will retrieve the graph for a node (or use the graphs command to retrieve the graphs for
+multiple nodes provided in files or stdin). The node is identified by a node id (e.g., 1191441824276882),
 name (e.g., WhiteHouse) or a Facebook url (e.g., https://www.facebook.com/WhiteHouse/).
 
 The node graph is retrieved according to the specified definition. If the type of a node is not
