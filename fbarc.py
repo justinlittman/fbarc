@@ -181,7 +181,8 @@ def main():
             print('Warning: Using an app token. You may encounter authorization problems.', file=sys.stderr)
         node_id = None
         try:
-            fb = Fbarc(token=token, delay_secs=args.delay)
+            fb = Fbarc(token=token, delay_secs=args.delay,
+                       node_overrides=load_node_overrides(args.override) if hasattr(args, 'override') else None)
             if args.command == 'metadata':
                 if args.update:
                     node_type, fields, connections = fb.get_parsed_metadata(args.node)
@@ -214,6 +215,23 @@ def main():
             if e.code == 100:
                 print('Hint: Use a user token instead of an app token. See README for explanation.', file=sys.stderr)
             quit(1)
+
+
+def load_node_overrides(node_overrides_filepath):
+    node_overrides_dict = {}
+    if os.path.exists(node_overrides_filepath):
+        with open(node_overrides_filepath) as f:
+            node_overrides = json.load(f)
+        for node_ids, fields in node_overrides:
+            if isinstance(node_ids, str):
+                node_ids = (node_ids,)
+            if isinstance(fields, str):
+                fields = (fields,)
+            for node_id in node_ids:
+                node_overrides_dict[node_id] = fields
+    else:
+        log.warn('Node override file %s does not exist.', node_overrides_filepath)
+    return node_overrides_dict
 
 
 def graph_command(definition_name, node_id, levels, exclude_definition_name, pretty, output_dir, fb):
@@ -320,6 +338,8 @@ def get_argparser():
                               help='node type definitions to exclude from recursive retrieval', default=[])
     graph_parser.add_argument('--pretty', action='store_true', help='pretty print output')
     graph_parser.add_argument('--output-dir', help='write output to file in this directory')
+    graph_parser.add_argument('--override', help='config for omitting fields from particular nodes',
+                              default='node_overrides.json')
 
     graphs_parser = subparsers.add_parser('graphs', help='retrieve multiple nodes from the Graph API')
     graphs_parser.add_argument('definition', choices=definition_choices,
@@ -333,6 +353,8 @@ def get_argparser():
                                help='node type definitions to exclude from recursive retrieval', default=[])
     graphs_parser.add_argument('--pretty', action='store_true', help='pretty print output')
     graphs_parser.add_argument('--output-dir', help='write output to files in this directory')
+    graphs_parser.add_argument('--override', help='config for omitting fields from particular nodes',
+                               default='node_overrides.json')
 
     metadata_parser = subparsers.add_parser('metadata', help='retrieve metadata for a node from the Graph API')
     metadata_parser.add_argument('node', help='identify node to retrieve by providing node id, username, or Facebook '
@@ -404,7 +426,7 @@ def raise_for_fb_exception(response, data=None, params=None):
 
 
 class Fbarc(object):
-    def __init__(self, token=None, delay_secs=.5):
+    def __init__(self, token=None, delay_secs=.5, node_overrides=None):
         log.debug('Token is %s', token)
         self.token = token
 
@@ -416,6 +438,9 @@ class Fbarc(object):
         self.delay_secs = delay_secs
         self.get_errors_limit = 10
         self.get_error_delay_secs = 30
+
+        self.node_overrides = node_overrides or dict()
+        log.debug('Node overrides are %s', self.node_overrides)
 
     def generate_url(self, node_id, definition_name, escape=False):
         """
@@ -444,7 +469,12 @@ class Fbarc(object):
             log.info("Getting nodes %s (%s). %s nodes left: %s", node_ids, definition_name, len(node_queue),
                      node_counter.most_common())
             try:
-                node_graph_dict = self.get_node_batch(node_ids, definition_name)
+                # If a single node, use get_node. Otherwise, use get_node_batch. Get_node supports omitting fields.
+                node_graph_dict = dict()
+                if len(node_ids) == 1:
+                    node_graph_dict[node_ids[0]] = self.get_node(node_ids[0], definition_name)
+                else:
+                    node_graph_dict = self.get_node_batch(node_ids, definition_name)
                 for node_id, node_graph in node_graph_dict.items():
                     retrieved_nodes.add(node_id)
                     if levels == 0 or level < levels:
@@ -484,9 +514,11 @@ class Fbarc(object):
             peak_definition_name = None
             peak_level = None
             if node_queue:
-                _, peak_definition_name, peak_level = node_queue[0]
+                peak_node_id, peak_definition_name, peak_level = node_queue[0]
+            # Checking if this or next node in node overrides. This forces nodes with overrides to be in own batch.
             if peak_definition_name != pop_definition_name or peak_level != pop_level or len(
-                    node_ids) == pop_definition.node_batch_size:
+                    node_ids) == pop_definition.node_batch_size \
+                    or pop_node_id in self.node_overrides or peak_node_id in self.node_overrides:
                 yield node_ids, pop_definition_name, pop_level
                 node_ids = []
 
@@ -630,7 +662,8 @@ class Fbarc(object):
         """
         params = {
             'metadata': 1,
-            'fields': self._prepare_field_param(definition_name, default_only=False)
+            'fields': self._prepare_field_param(definition_name, default_only=False,
+                                                omit_fields=self.node_overrides.get(node_id))
         }
         return self._prepare_url(node_id), params
 
@@ -654,7 +687,7 @@ class Fbarc(object):
         """
         return "{}/{}".format(GRAPH_URL, node_id)
 
-    def _prepare_field_param(self, definition_name, default_only=True):
+    def _prepare_field_param(self, definition_name, default_only=True, omit_fields=None):
         """
         Construct the fields parameter.
         """
@@ -665,15 +698,21 @@ class Fbarc(object):
         fields.extend(definition.default_fields)
         if not default_only:
             fields.extend(definition.fields)
+        # Remove omitted fields
+        if omit_fields:
+            for field in omit_fields:
+                if field in fields:
+                    fields.remove(field)
         edges = list(definition.default_edges)
         if not default_only:
             edges.extend(definition.edges)
         for edge in edges:
-            edge_type = definition.get_edge_type(edge)
-            edge_definition = self.get_definition(edge_type)
-            fields.append(
-                '{}.limit({}){{{}}}'.format(edge, edge_definition.edge_size,
-                                            self._prepare_field_param(edge_type)))
+            if omit_fields is None or edge not in omit_fields:
+                edge_type = definition.get_edge_type(edge)
+                edge_definition = self.get_definition(edge_type)
+                fields.append(
+                    '{}.limit({}){{{}}}'.format(edge, edge_definition.edge_size,
+                                                self._prepare_field_param(edge_type)))
         if 'id' not in fields:
             fields.insert(0, 'id')
         return ','.join(fields)

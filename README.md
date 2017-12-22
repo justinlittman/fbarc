@@ -202,6 +202,20 @@ The [Graph API Explorer](https://developers.facebook.com/tools/explorer) is help
 the fields and connections that are available for a node type. Less helpful is the 
 [Graph API Reference](https://developers.facebook.com/docs/graph-api/reference).
 
+## Graph API flakiness
+Sometimes for inexplicable reasons, the Graph API will report errors for particular fields. For example,
+as of late 2017, requesting the visitor_posts edge on [SenatorTedCruz](https://www.facebook.com/SenatorTedCruz)
+with even a limit of 1 results in a "Please reduce the amount of data you're asking for, then retry your request"
+error.
+
+To handle this, f(b)arc support node overrides. Node overrides allow specifying fields to omit when requesting
+particular nodes. When you encounter an error, the best way to determine which fields to omit is to experiment
+with the Graph API Explorer.
+
+To configure node overrides, create a node overrides JSON configuration file. (See `example.node_overrides.json`
+for an example.) F(b)arc will use `node_overrides.json` by default if found, but a different file can be specified
+with the `--override` flag.
+
 ## F(b)arc Viewer
 F(b)arc Viewer allows you to view and explore the data retrieved from the API.
 
