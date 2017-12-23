@@ -202,8 +202,9 @@ def main():
             elif args.command == 'graphs':
                 for line in fileinput.input(files=args.node_files if len(args.node_files) > 0 else ('-',)):
                     node_id = line.rstrip('\n')
-                    graph_command(args.definition, node_id, args.levels, args.exclude, args.pretty,
-                                  args.output_dir, fb)
+                    if node_id:
+                        graph_command(args.definition, node_id, args.levels, args.exclude, args.pretty,
+                                      args.output_dir, fb, skip=args.skip)
             else:
                 node_id = args.node
                 graph_command(args.definition, node_id, args.levels, args.exclude, args.pretty, args.output_dir, fb)
@@ -234,24 +235,28 @@ def load_node_overrides(node_overrides_filepath):
     return node_overrides_dict
 
 
-def graph_command(definition_name, node_id, levels, exclude_definition_name, pretty, output_dir, fb):
+def graph_command(definition_name, node_id, levels, exclude_definition_name, pretty, output_dir, fb, skip=False):
     if definition_name == 'discover':
         definition_name = fb.discover_type(node_id)
 
     output_file = None
+    output_filepath = None
     if output_dir:
         os.makedirs(output_dir, exist_ok=True)
         output_filepath = os.path.join(output_dir, '{}.jsonl'.format(node_id))
         output_file = open(output_filepath, 'w')
-    try:
-        print('Getting graph for node {}'.format(node_id), file=sys.stderr)
-        print_graphs(fb.get_nodes(node_id, definition_name, levels=levels,
-                                  exclude_definition_names=exclude_definition_name), pretty=pretty,
-                     file=output_file or sys.stdout)
-    finally:
-        if output_file:
-            output_file.close()
 
+    if not output_filepath or not skip or not os.path.exists(output_filepath):
+        try:
+            print('Getting graph for node {}'.format(node_id), file=sys.stderr)
+            print_graphs(fb.get_nodes(node_id, definition_name, levels=levels,
+                                      exclude_definition_names=exclude_definition_name), pretty=pretty,
+                         file=output_file or sys.stdout)
+        finally:
+            if output_file:
+                output_file.close()
+    else:
+        log.info('Skipping %s', node_id)
 
 def update_definition_map(definition_map, field_names):
     new_definition_map = copy.deepcopy(definition_map)
@@ -353,6 +358,7 @@ def get_argparser():
                                help='node type definitions to exclude from recursive retrieval', default=[])
     graphs_parser.add_argument('--pretty', action='store_true', help='pretty print output')
     graphs_parser.add_argument('--output-dir', help='write output to files in this directory')
+    graphs_parser.add_argument('--skip', action='store_true', help='skip node if output file exists')
     graphs_parser.add_argument('--override', help='config for omitting fields from particular nodes',
                                default='node_overrides.json')
 
