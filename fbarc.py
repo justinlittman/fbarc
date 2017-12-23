@@ -242,21 +242,22 @@ def graph_command(definition_name, node_id, levels, exclude_definition_name, pre
     output_file = None
     output_filepath = None
     if output_dir:
-        os.makedirs(output_dir, exist_ok=True)
         output_filepath = os.path.join(output_dir, '{}.jsonl'.format(node_id))
+        if skip and os.path.exists(output_filepath):
+            log.info('Skipping %s', node_id)
+            return
+        os.makedirs(output_dir, exist_ok=True)
         output_file = open(output_filepath, 'w')
 
-    if not output_filepath or not skip or not os.path.exists(output_filepath):
-        try:
-            print('Getting graph for node {}'.format(node_id), file=sys.stderr)
-            print_graphs(fb.get_nodes(node_id, definition_name, levels=levels,
-                                      exclude_definition_names=exclude_definition_name), pretty=pretty,
-                         file=output_file or sys.stdout)
-        finally:
-            if output_file:
-                output_file.close()
-    else:
-        log.info('Skipping %s', node_id)
+    try:
+        print('Getting graph for node {}'.format(node_id), file=sys.stderr)
+        print_graphs(fb.get_nodes(node_id, definition_name, levels=levels,
+                                  exclude_definition_names=exclude_definition_name), pretty=pretty,
+                     file=output_file or sys.stdout)
+    finally:
+        if output_file:
+            output_file.close()
+
 
 def update_definition_map(definition_map, field_names):
     new_definition_map = copy.deepcopy(definition_map)
