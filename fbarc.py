@@ -603,9 +603,13 @@ class Fbarc(object):
         return new_pages
 
     def get_page(self, page_link, graph_fragment):
-
-        page_json = self._perform_http_get(page_link, use_token=False)
-        return self.merge_page(page_json, graph_fragment)
+        pages = []
+        try:
+            page_json = self._perform_http_get(page_link, use_token=False)
+            pages = self.merge_page(page_json, graph_fragment)
+        except FbException:
+            log.warning('Ignoring error on page.')
+        return pages
 
     def merge_page(self, page_fragment, graph_fragment):
         """
