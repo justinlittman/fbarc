@@ -595,10 +595,17 @@ class Fbarc(object):
             batch_item = batch_json[count]
             body = json.loads(batch_item['body'])
             if batch_item['code'] != 200:
-                log.error('Error for page %s: %s', page_link, json.dumps(body, indent=4))
-                raise FbException(body)
-            new_pages.extend(self.merge_page(body, graph_fragment))
+                log.error('Error for page %s in batch: %s', page_link, json.dumps(body, indent=4))
+                # Try getting this by itself
+                new_pages.extend(self.get_page(page_link, graph_fragment))
+            else:
+                new_pages.extend(self.merge_page(body, graph_fragment))
         return new_pages
+
+    def get_page(self, page_link, graph_fragment):
+
+        page_json = self._perform_http_get(page_link, use_token=False)
+        return self.merge_page(page_json, graph_fragment)
 
     def merge_page(self, page_fragment, graph_fragment):
         """
