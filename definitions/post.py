@@ -34,7 +34,8 @@ definition = {
         'is_published': {'omit': True},
         'is_spherical': {'omit': True},
         'likes': {},
-        'link': {'default': True},
+        # link and type cause an error for some posts when getting edges
+        'link': {},
         'message': {'default': True},
         'message_tags': {},
         'multi_share_end_card': {'omit': True},
@@ -64,7 +65,8 @@ definition = {
         'targeting': {'omit': True},
         'timeline_visibility': {'omit': True},
         'to': {'default': True},
-        'type': {'default': True},
+        # link and type cause an error for some posts when getting edges
+        'type': {},
         'updated_time': {'default': True},
         'via': {},
         'video_buying_eligibility': {'omit': True},
