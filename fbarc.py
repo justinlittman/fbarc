@@ -807,7 +807,8 @@ class Fbarc(object):
         except FbException as e:
             # Handle transient facebook errors and unexpected GraphMethodException: Unsupported get request.
             # Seem that this GraphMethodException may be transient.
-            if e.is_transient or (e.code == 100 and e.subcode == 33):
+            # Also too much data requested is also transient.
+            if e.is_transient or (e.code == 100 and e.subcode == 33) or e.code == 1:
                 logging.error('caught facebook error %s on %s try', e, try_count)
                 if self.get_errors_limit == try_count:
                     logging.error('received too many errors')
@@ -863,7 +864,8 @@ class Fbarc(object):
         except FbException as e:
             # Handle transient facebook errors and unexpected GraphMethodException: Unsupported get request.
             # Seem that this GraphMethodException may be transient.
-            if e.is_transient or (e.code == 100 and e.subcode == 33):
+            # Also too much data requested is also transient.
+            if e.is_transient or (e.code == 100 and e.subcode == 33) or e.code == 1:
                 logging.error('caught facebook error %s on %s try', e, try_count)
                 if self.get_errors_limit == try_count:
                     logging.error('received too many errors for %s (%s)', url, data)
