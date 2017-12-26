@@ -234,6 +234,19 @@ A handy shortcut to load data directly from `fbarch.py` is:
 
 Once F(b)arc Viewer is running, it will be available at [http://localhost:5000/](http://localhost:5000/).
 
+### Freezing F(b)arc Viewer
+Freezing will write static files from F(b)arc Viewer. These can be deployed to a web server
+so that F(b)arc Viewer does not need to be kept running.
+
+To run:
+
+    python fbarc_viewer_freeze.py <output dir> <filepaths to JSONL files from f(b)arc
+    
+For example:
+
+    python fbarc_viewer_freeze.py /var/www/html TestMcTestpage.jsonl
+
+
 ## Unit tests
 
 To run unit tests:

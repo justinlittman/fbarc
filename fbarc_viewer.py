@@ -43,6 +43,7 @@ def json_node(node_id):
         abort(404)
     return jsonify(nodes[node_id])
 
+
 @app.route('/<node_id>')
 def node(node_id):
     if node_id not in nodes:
