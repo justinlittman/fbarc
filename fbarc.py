@@ -555,31 +555,41 @@ class Fbarc(object):
         """
         Gets a node graphs for a list of nodes as specified by the node type definition.
         """
-        url, params = self._prepare_nodes_request(node_ids, definition_name)
-        # Using post because querystring might be huge.
-        params['method'] = 'GET'
-        # Returns a map of ids to graphs
-        nodes_graph_dict = self._perform_http_post(url, data=params)
+        nodes_graph_dict = dict()
+        try:
+            url, params = self._prepare_nodes_request(node_ids, definition_name)
+            # Using post because querystring might be huge.
+            params['method'] = 'GET'
+            # Returns a map of ids to graphs
+            nodes_graph_dict = self._perform_http_post(url, data=params)
 
-        paging_queue = collections.deque()
+            paging_queue = collections.deque()
 
-        for node_id in node_ids:
-            if node_id in nodes_graph_dict:
-                # Queue of pages to retrieve.
-                paging_queue.extend(self.find_paging_links(nodes_graph_dict[node_id]))
+            for node_id in node_ids:
+                if node_id in nodes_graph_dict:
+                    # Queue of pages to retrieve.
+                    paging_queue.extend(self.find_paging_links(nodes_graph_dict[node_id]))
+                else:
+                    log.warning('Node %s is missing or not permitted, so skipping.', node_id)
+
+            definition = self.get_definition(definition_name)
+
+            # Retrieve pages. Note that additional pages may be appended to queue.
+            while paging_queue:
+                pages = []
+                for _ in range(min(definition.node_batch_size, len(paging_queue))):
+                    page_link, graph_fragment = paging_queue.popleft()
+                    pages.append((page_link, graph_fragment))
+                paging_queue.extend(self.get_page_batch(pages))
+        except FbException as e:
+            # Try one node at a time if too much data exception
+            if e.code == 1:
+                log.warning('Please reduce the amount of data error, so trying one node at a time.')
+                for node_id in node_ids:
+                    log.info('Getting node %s (%s)', node_id, definition_name)
+                    nodes_graph_dict[node_id] = self.get_node(node_id, definition_name)
             else:
-                log.warn('Node %s is missing or not permitted, so skipping.', node_id)
-
-        definition = self.get_definition(definition_name)
-
-        # Retrieve pages. Note that additional pages may be appended to queue.
-        while paging_queue:
-            pages = []
-            for _ in range(min(definition.node_batch_size, len(paging_queue))):
-                page_link, graph_fragment = paging_queue.popleft()
-                pages.append((page_link, graph_fragment))
-            paging_queue.extend(self.get_page_batch(pages))
-
+                raise e
         return nodes_graph_dict
 
     def get_page_batch(self, pages):
@@ -588,6 +598,7 @@ class Fbarc(object):
         for page_link, _ in pages:
             batch_list.append({'method': 'GET', 'relative_url': page_link[len(GRAPH_URL) + 1:]})
         data = {'batch': json.dumps(batch_list), 'include_headers': 'false'}
+
         batch_json = self._perform_http_post(GRAPH_URL, data=data)
 
         new_pages = []
