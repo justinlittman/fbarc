@@ -215,6 +215,8 @@ def main():
             print('{}: {}'.format(error_msg, e.message), file=sys.stderr)
             if e.code == 100:
                 print('Hint: Use a user token instead of an app token. See README for explanation.', file=sys.stderr)
+            elif e.code == 190 and e.subcode == 490:
+                print('Hint: Security check triggered. Log into your Facebook account.')
             quit(1)
 
 
