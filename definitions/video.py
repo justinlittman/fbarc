@@ -1,4 +1,5 @@
 definition = {
+    'node_batch_size': 5,
     'fields': {
         'ad_breaks': {'omit': True},
         'auto_generated_captions': {'omit': True},
