@@ -1,4 +1,5 @@
 definition = {
+    'node_batch_size': 10,
     'fields': {
         'ad_break_config': {'omit': True},
         'ad_break_failure_reason': {'omit': True},
