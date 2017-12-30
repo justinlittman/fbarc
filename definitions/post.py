@@ -1,6 +1,6 @@
 definition = {
     'edge_size': 25,
-    'node_batch_size': 10,
+    'node_batch_size': 5,
     'fields': {
         'actions': {'omit': True},
         'admin_creator': {'omit': True},
