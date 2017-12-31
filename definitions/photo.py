@@ -1,4 +1,5 @@
 definition = {
+    'node_batch_size': 5,
     'fields': {
         'album': {'edge_type': 'album', 'follow_edge': False},
         'backdated_time': {},
