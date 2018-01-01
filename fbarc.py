@@ -205,6 +205,8 @@ def main():
                     if node_id:
                         graph_command(args.definition, node_id, args.levels, args.exclude, args.pretty,
                                       args.output_dir, fb, skip=args.skip)
+            elif args.command == 'resume':
+                print_graphs(fb.resume(args.file, args.levels, args.exclude))
             else:
                 node_id = args.node
                 graph_command(args.definition, node_id, args.levels, args.exclude, args.pretty, args.output_dir, fb)
@@ -233,7 +235,7 @@ def load_node_overrides(node_overrides_filepath):
             for node_id in node_ids:
                 node_overrides_dict[node_id] = fields
     else:
-        log.warn('Node override file %s does not exist.', node_overrides_filepath)
+        log.warning('Node override file %s does not exist.', node_overrides_filepath)
     return node_overrides_dict
 
 
@@ -365,6 +367,15 @@ def get_argparser():
     graphs_parser.add_argument('--override', help='config for omitting fields from particular nodes',
                                default='node_overrides.json')
 
+    resume_parser = subparsers.add_parser('resume', help='resume retrieving nodes from the Graph API')
+    resume_parser.add_argument('file', help='file to resume')
+    resume_parser.add_argument('--levels', type=int, default='1',
+                               help='number of levels of nodes to retrieve (default=1, infinite=0)')
+    resume_parser.add_argument('--exclude', nargs='+', choices=list(definition_importers.keys()),
+                               help='node type definitions to exclude from recursive retrieval', default=[])
+    resume_parser.add_argument('--override', help='config for omitting fields from particular nodes',
+                               default='node_overrides.json')
+
     metadata_parser = subparsers.add_parser('metadata', help='retrieve metadata for a node from the Graph API')
     metadata_parser.add_argument('node', help='identify node to retrieve by providing node id, username, or Facebook '
                                               'URL')
@@ -473,6 +484,10 @@ class Fbarc(object):
         node_queue.appendleft((root_node_id, root_definition_name, 1))
         node_counter[root_definition_name] += 1
         retrieved_nodes = set()
+        for node_graph in self._get_nodes(node_counter, node_queue, retrieved_nodes, levels, exclude_definition_names):
+            yield node_graph
+
+    def _get_nodes(self, node_counter, node_queue, retrieved_nodes, levels, exclude_definition_names):
         for node_ids, definition_name, level in self.node_queue_iter(node_queue):
             node_counter[definition_name] -= len(node_ids)
             log.info("Getting nodes %s (%s). %s nodes left: %s", node_ids, definition_name, len(node_queue),
@@ -492,8 +507,8 @@ class Fbarc(object):
                         added_count = 0
                         for connected_node_id, connected_definition_name in connected_nodes:
                             if connected_node_id not in retrieved_nodes and (
-                                            connected_definition_name is None or
-                                            connected_definition_name not in exclude_definition_names):
+                                    connected_definition_name is None or
+                                    connected_definition_name not in exclude_definition_names):
                                 log.debug('%s found in %s', connected_node_id, node_id)
                                 node_queue.append((connected_node_id, connected_definition_name, level + 1))
                                 node_counter[connected_definition_name] += 1
@@ -927,6 +942,41 @@ class Fbarc(object):
                 page_queue.extend(self.find_paging_links(value))
 
         return page_queue
+
+    def resume(self, filepath, levels=1, exclude_definition_names=None):
+        node_counter = collections.Counter()
+        node_queue_dict = collections.OrderedDict()
+        retrieved_nodes = set()
+        with open(filepath) as file:
+            for count, line in enumerate(file):
+                node_graph = json.loads(line)
+                node_id = node_graph['id']
+                if count == 0:
+                    node_queue_dict[node_id] = (node_id, node_graph['metadata']['type'], 1)
+                if node_id in node_queue_dict:
+                    _, definition_name, level = node_queue_dict.pop(node_id)
+                    node_counter[definition_name] += 1
+                    retrieved_nodes.add(node_id)
+                    if levels == 0 or level < levels:
+                        connected_nodes = self.find_connected_nodes(definition_name, node_graph,
+                                                                    default_only=False)
+                        added_count = 0
+                        for connected_node_id, connected_definition_name in connected_nodes:
+                            if connected_node_id not in retrieved_nodes and (
+                                    connected_definition_name is None or
+                                    connected_definition_name not in exclude_definition_names):
+                                log.debug('%s found in %s', connected_node_id, node_id)
+                                node_queue_dict[connected_node_id] = (
+                                connected_node_id, connected_definition_name, level + 1)
+                                node_counter[connected_definition_name] += 1
+                                added_count += 1
+                        log.debug("%s connected nodes found in %s and %s added to node queue.", len(connected_nodes),
+                                  node_id, added_count)
+        node_queue = collections.deque(node_queue_dict.values())
+        log.info('Resuming with %s nodes in node queue.', len(node_queue))
+        with open(filepath, 'a') as output_file:
+            print_graphs(self._get_nodes(node_counter, node_queue, retrieved_nodes, levels, exclude_definition_names),
+                         pretty=False, file=output_file)
 
 
 class Definition:
