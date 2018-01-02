@@ -12,33 +12,33 @@ fbarc_viewer.url_for = relative_url_for
 
 app = Flask(__name__)
 
-nodes = {}
-stats_counter = Counter()
-first_node_id = None
+# nodes = {}
+# stats_counter = Counter()
+# first_node_id = None
 
 
 @app.route('/')
 def home():
-    return node(None, first_node_id)
+    return node(None, fbarc_viewer.first_node_id)
 
 
 @app.route('/stats.html')
 def stats():
-    return render_template('stats.html', stats=stats_counter)
+    return render_template('stats.html', stats=fbarc_viewer.stats_counter)
 
 
 @app.route('/<path:node_path>/<node_id>.json')
 def json_node(node_path, node_id):
-    if node_id not in nodes:
+    if node_id not in fbarc_viewer.nodes:
         abort(404)
-    return jsonify(nodes[node_id])
+    return jsonify(fbarc_viewer.nodes[node_id])
 
 
 @app.route('/<path:node_path>/<node_id>.html')
 def node(node_path, node_id):
-    if node_id not in nodes:
+    if node_id not in fbarc_viewer.nodes:
         abort(404)
-    return render_template('node.html', node_id=node_id, node_lines=fbarc_viewer.render_obj(nodes[node_id]))
+    return render_template('node.html', node_id=node_id, node_lines=fbarc_viewer.render_obj(fbarc_viewer.nodes[node_id]))
 
 
 # To avoid putting too many files in a single directory, creating a node path
@@ -50,20 +50,19 @@ def add_node_path(endpoint, values):
 
 
 def read_fb_json(filepath):
-    global nodes, stats_counter, first_node_id
-    nodes = {}
-    stats_counter = Counter()
-    first_node_id = None
+    fbarc_viewer.nodes = {}
+    fbarc_viewer.stats_counter = Counter()
+    fbarc_viewer.first_node_id = None
 
     with open(filepath) as file:
         for line in file:
             node = json.loads(line.rstrip('\n'))
             if 'id' in node:
-                nodes[node['id']] = node
+                fbarc_viewer.nodes[node['id']] = node
                 if 'metadata' in node:
-                    stats_counter[node['metadata']['type']] += 1
-                if first_node_id is None:
-                    first_node_id = node['id']
+                    fbarc_viewer.stats_counter[node['metadata']['type']] += 1
+                if fbarc_viewer.first_node_id is None:
+                    fbarc_viewer.first_node_id = node['id']
 
 
 def freeze(json_filepath, output_dir):
