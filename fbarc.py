@@ -206,7 +206,7 @@ def main():
                         graph_command(args.definition, node_id, args.levels, args.exclude, args.pretty,
                                       args.output_dir, fb, skip=args.skip)
             elif args.command == 'resume':
-                print_graphs(fb.resume(args.file, args.levels, args.exclude))
+                fb.resume(args.file, args.levels, args.exclude)
             else:
                 node_id = args.node
                 graph_command(args.definition, node_id, args.levels, args.exclude, args.pretty, args.output_dir, fb)
@@ -483,15 +483,16 @@ class Fbarc(object):
         node_queue = collections.deque()
         node_queue.appendleft((root_node_id, root_definition_name, 1))
         node_counter[root_definition_name] += 1
-        retrieved_nodes = set()
-        for node_graph in self._get_nodes(node_counter, node_queue, retrieved_nodes, levels, exclude_definition_names):
+        queued_nodes = set()
+        queued_nodes.add(root_node_id)
+        for node_graph in self._get_nodes(node_counter, node_queue, queued_nodes, levels, exclude_definition_names):
             yield node_graph
 
-    def _get_nodes(self, node_counter, node_queue, retrieved_nodes, levels, exclude_definition_names):
+    def _get_nodes(self, node_counter, node_queue, queued_nodes, levels, exclude_definition_names):
         for node_ids, definition_name, level in self.node_queue_iter(node_queue):
             node_counter[definition_name] -= len(node_ids)
-            log.info("Getting nodes %s (%s). %s nodes left: %s", node_ids, definition_name, len(node_queue),
-                     node_counter.most_common())
+            log.info('Getting nodes {} ({}). {:,} nodes left: {}'.format(node_ids, definition_name, len(node_queue),
+                     node_counter.most_common()))
             try:
                 # If a single node, use get_node. Otherwise, use get_node_batch. Get_node supports omitting fields.
                 node_graph_dict = dict()
@@ -500,18 +501,19 @@ class Fbarc(object):
                 else:
                     node_graph_dict = self.get_node_batch(node_ids, definition_name)
                 for node_id, node_graph in node_graph_dict.items():
-                    retrieved_nodes.add(node_id)
                     if levels == 0 or level < levels:
                         connected_nodes = self.find_connected_nodes(definition_name, node_graph,
                                                                     default_only=False)
                         added_count = 0
+                        # Checking queued nodes makes sure that never has been queued before.
                         for connected_node_id, connected_definition_name in connected_nodes:
-                            if connected_node_id not in retrieved_nodes and (
+                            if connected_node_id not in queued_nodes and (
                                     connected_definition_name is None or
                                     connected_definition_name not in exclude_definition_names):
                                 log.debug('%s found in %s', connected_node_id, node_id)
                                 node_queue.append((connected_node_id, connected_definition_name, level + 1))
                                 node_counter[connected_definition_name] += 1
+                                queued_nodes.add(connected_node_id)
                                 added_count += 1
                         log.debug("%s connected nodes found in %s and %s added to node queue.", len(connected_nodes),
                                   node_id, added_count)
@@ -519,7 +521,7 @@ class Fbarc(object):
             except FbException as e:
                 # Sometimes get unexpected GraphMethodException: Unsupported get request.
                 if e.code == 100 and e.subcode == 33:
-                    log.warn('Skipping %s due to unexpected GraphMethodException: %s', node_id, e)
+                    log.warning('Skipping %s due to unexpected GraphMethodException: %s', node_id, e)
                 else:
                     raise e
 
@@ -946,36 +948,40 @@ class Fbarc(object):
     def resume(self, filepath, levels=1, exclude_definition_names=None):
         node_counter = collections.Counter()
         node_queue_dict = collections.OrderedDict()
-        retrieved_nodes = set()
+        queued_nodes = set()
         with open(filepath) as file:
             for count, line in enumerate(file):
                 node_graph = json.loads(line)
                 node_id = node_graph['id']
                 if count == 0:
-                    node_queue_dict[node_id] = (node_id, node_graph['metadata']['type'], 1)
+                    definition_name = node_graph['metadata']['type']
+                    node_queue_dict[node_id] = (node_id, definition_name, 1)
+                    node_counter[definition_name] += 1
+                    queued_nodes.add(node_id)
                 if node_id in node_queue_dict:
                     _, definition_name, level = node_queue_dict.pop(node_id)
-                    node_counter[definition_name] += 1
-                    retrieved_nodes.add(node_id)
+                    node_counter[definition_name] -= 1
                     if levels == 0 or level < levels:
                         connected_nodes = self.find_connected_nodes(definition_name, node_graph,
                                                                     default_only=False)
                         added_count = 0
                         for connected_node_id, connected_definition_name in connected_nodes:
-                            if connected_node_id not in retrieved_nodes and (
+                            if connected_node_id not in queued_nodes and (
                                     connected_definition_name is None or
-                                    connected_definition_name not in exclude_definition_names):
+                                    connected_definition_name not in exclude_definition_names) and \
+                                    connected_node_id not in node_queue_dict:
                                 log.debug('%s found in %s', connected_node_id, node_id)
                                 node_queue_dict[connected_node_id] = (
-                                connected_node_id, connected_definition_name, level + 1)
+                                    connected_node_id, connected_definition_name, level + 1)
                                 node_counter[connected_definition_name] += 1
                                 added_count += 1
+                                queued_nodes.add(connected_node_id)
                         log.debug("%s connected nodes found in %s and %s added to node queue.", len(connected_nodes),
                                   node_id, added_count)
         node_queue = collections.deque(node_queue_dict.values())
         log.info('Resuming with %s nodes in node queue.', len(node_queue))
         with open(filepath, 'a') as output_file:
-            print_graphs(self._get_nodes(node_counter, node_queue, retrieved_nodes, levels, exclude_definition_names),
+            print_graphs(self._get_nodes(node_counter, node_queue, queued_nodes, levels, exclude_definition_names),
                          pretty=False, file=output_file)
 
 

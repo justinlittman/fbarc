@@ -19,5 +19,8 @@ if __name__ == '__main__':
             print('Error line: {}'.format(line))
             sys.exit(1)
 
+    total = 0
     for node_type, count in stats_counter.most_common():
-        print('{}: {}'.format(node_type, count))
+        total += count
+        print('{}: {:,}'.format(node_type, count))
+    print('Total: {:,}'.format(total))
