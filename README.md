@@ -68,7 +68,7 @@ These are instructions for Python 3. Make appropriate adjustments for Python 2.
         
 4. Install requirements:
 
-        pip install -r requirements/requirement3.txt
+        pip install -r requirements/requirements3.txt
         
 5. Get commandline usage:
 
