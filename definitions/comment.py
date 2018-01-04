@@ -21,7 +21,7 @@ definition = {
         'live_broadcast_timestamp': {'omit': True},
         'message': {'default': True},
         'message_tags': {},
-        'object': {'omit': True},
+        'object': {'edge_type': 'object', 'follow_edge': False},
         'parent': {'edge_type': 'comment'},
         'permalink_url': {'default': True},
         'private_reply_conversation': {'omit': True},
