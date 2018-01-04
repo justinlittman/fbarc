@@ -27,5 +27,14 @@ definition = {
         'private_reply_conversation': {'omit': True},
         'reactions': {},
         'user_likes': {'omit': True},
-    }
+    },
+    'csv_fields': [
+        'created_time',
+        'message',
+        'permalink_url',
+        {'parent_video_or_photo': ['object', 'id']},
+        {'parent_comment': ['parent', 'id']},
+        'comment_count',
+        'like_count'
+    ]
 }

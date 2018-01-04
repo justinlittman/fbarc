@@ -15,6 +15,8 @@ from datetime import datetime, timedelta, timezone
 import iso8601
 import time
 import fileinput
+import contextlib
+import csv
 
 import definitions
 import local_definitions
@@ -200,16 +202,16 @@ def main():
             elif args.command == 'search':
                 print_graph(fb.search(args.node_type, args.query))
             elif args.command == 'graphs':
-                for line in fileinput.input(files=args.node_files if len(args.node_files) > 0 else ('-',)):
-                    node_id = line.rstrip('\n')
-                    if node_id:
-                        graph_command(args.definition, node_id, args.levels, args.exclude, args.pretty,
-                                      args.output_dir, fb, skip=args.skip)
+                graph_command(args.definition, [line.rstrip('\n') for line in fileinput.input(
+                    files=args.node_files if len(args.node_files) > 0 else ('-',))], args.levels, args.exclude,
+                              args.pretty,
+                              args.output_dir, args.csv_output_dir, fb, skip=args.skip)
             elif args.command == 'resume':
                 fb.resume(args.file, args.levels, args.exclude)
             else:
                 node_id = args.node
-                graph_command(args.definition, node_id, args.levels, args.exclude, args.pretty, args.output_dir, fb)
+                graph_command(args.definition, (node_id,), args.levels, args.exclude, args.pretty, args.output_dir,
+                              args.csv_output_dir, fb)
         except FbException as e:
             error_msg = 'Error:'
             if node_id:
@@ -239,28 +241,63 @@ def load_node_overrides(node_overrides_filepath):
     return node_overrides_dict
 
 
-def graph_command(definition_name, node_id, levels, exclude_definition_name, pretty, output_dir, fb, skip=False):
-    if definition_name == 'discover':
-        definition_name = fb.discover_type(node_id)
+def graph_command(definition_name, node_iter, levels, exclude_definition_name, pretty, output_dir, csv_output_dir, fb,
+                  skip=False):
+    graph_outputs = []
+    # Optional context
+    with contextlib.ExitStack() as csv_output_stack:
+        if csv_output_dir:
+            os.makedirs(csv_output_dir, exist_ok=True)
+            graph_outputs.append(csv_output_stack.enter_context(CsvGraphOutput(csv_output_dir, fb)))
 
-    output_file = None
-    output_filepath = None
-    if output_dir:
-        output_filepath = os.path.join(output_dir, '{}.jsonl'.format(node_id))
-        if skip and os.path.exists(output_filepath):
-            log.info('Skipping %s', node_id)
-            return
-        os.makedirs(output_dir, exist_ok=True)
-        output_file = open(output_filepath, 'w')
+        for node_id in node_iter:
+            if not node_id:
+                continue
+            if definition_name == 'discover':
+                definition_name = fb.discover_type(node_id)
 
-    try:
-        print('Getting graph for node {}'.format(node_id), file=sys.stderr)
-        print_graphs(fb.get_nodes(node_id, definition_name, levels=levels,
-                                  exclude_definition_names=exclude_definition_name), pretty=pretty,
-                     file=output_file or sys.stdout)
-    finally:
-        if output_file:
-            output_file.close()
+            with contextlib.ExitStack() as json_output_stack:
+                if output_dir:
+                    output_filepath = os.path.join(output_dir, '{}.jsonl'.format(node_id))
+                    if skip and os.path.exists(output_filepath):
+                        log.info('Skipping %s', node_id)
+                        return
+                    os.makedirs(output_dir, exist_ok=True)
+                    graph_outputs.append(
+                        json_output_stack.enter_context(JsonGraphOutput(pretty=pretty, filepath=output_filepath)))
+                else:
+                    graph_outputs.append(json_output_stack.enter_context(JsonGraphOutput(pretty=pretty)))
+
+                print('Getting graph for node {}'.format(node_id), file=sys.stderr)
+                print_graphs(fb.get_nodes(node_id, definition_name, levels=levels,
+                                          exclude_definition_names=exclude_definition_name), graph_outputs)
+                graph_outputs.pop()
+
+    # with contextlib.ExitStack() as output_stack:
+    #     graph_outputs = []
+    #     if output_dir:
+    #         output_filepath = os.path.join(output_dir, '{}.jsonl'.format(node_id))
+    #         if skip and os.path.exists(output_filepath):
+    #             log.info('Skipping %s', node_id)
+    #             return
+    #         os.makedirs(output_dir, exist_ok=True)
+    #         graph_outputs.append(output_stack.enter_context(JsonGraphOutput(pretty=pretty, filepath=output_filepath)))
+    #     else:
+    #         graph_outputs.append(output_stack.enter_context(JsonGraphOutput(pretty=pretty)))
+    #
+    #     if csv_output_dir:
+    #         os.makedirs(csv_output_dir, exist_ok=True)
+    #         graph_outputs.append(output_stack.enter_context(CsvGraphOutput(csv_output_dir, fb)))
+    #
+    #     print('Getting graph for node {}'.format(node_id), file=sys.stderr)
+    #     print_graphs(fb.get_nodes(node_id, definition_name, levels=levels,
+    #                               exclude_definition_names=exclude_definition_name), graph_outputs)
+
+
+def print_graphs(graph_iter, graph_outputs):
+    for graph in graph_iter:
+        for graph_output in graph_outputs:
+            graph_output.output_graph(graph)
 
 
 def update_definition_map(definition_map, field_names):
@@ -280,11 +317,6 @@ def definition_map_template(field_names):
 
 def print_graph(graph, pretty=False, file=sys.stdout):
     print(json.dumps(graph, indent=4 if pretty else None), file=file)
-
-
-def print_graphs(graph_iter, pretty=False, file=sys.stdout):
-    for graph in graph_iter:
-        print_graph(graph, pretty, file)
 
 
 def print_definition_map(definition_map, node_batch_size, edge_size):
@@ -347,7 +379,8 @@ def get_argparser():
     graph_parser.add_argument('--exclude', nargs='+', choices=list(definition_importers.keys()),
                               help='node type definitions to exclude from recursive retrieval', default=[])
     graph_parser.add_argument('--pretty', action='store_true', help='pretty print output')
-    graph_parser.add_argument('--output-dir', help='write output to file in this directory')
+    graph_parser.add_argument('--output-dir', help='write output to JSON file in this directory')
+    graph_parser.add_argument('--csv-output-dir', help='write output as CSV files in this directory')
     graph_parser.add_argument('--override', help='config for omitting fields from particular nodes',
                               default='node_overrides.json')
 
@@ -362,7 +395,8 @@ def get_argparser():
     graphs_parser.add_argument('--exclude', nargs='+', choices=list(definition_importers.keys()),
                                help='node type definitions to exclude from recursive retrieval', default=[])
     graphs_parser.add_argument('--pretty', action='store_true', help='pretty print output')
-    graphs_parser.add_argument('--output-dir', help='write output to files in this directory')
+    graphs_parser.add_argument('--output-dir', help='write output to JSON files in this directory')
+    graphs_parser.add_argument('--csv-output-dir', help='write output as CSV files in this directory')
     graphs_parser.add_argument('--skip', action='store_true', help='skip node if output file exists')
     graphs_parser.add_argument('--override', help='config for omitting fields from particular nodes',
                                default='node_overrides.json')
@@ -492,7 +526,7 @@ class Fbarc(object):
         for node_ids, definition_name, level in self.node_queue_iter(node_queue):
             node_counter[definition_name] -= len(node_ids)
             log.info('Getting nodes {} ({}). {:,} nodes left: {}'.format(node_ids, definition_name, len(node_queue),
-                     node_counter.most_common()))
+                                                                         node_counter.most_common()))
             try:
                 # If a single node, use get_node. Otherwise, use get_node_batch. Get_node supports omitting fields.
                 node_graph_dict = dict()
@@ -980,9 +1014,9 @@ class Fbarc(object):
                                   node_id, added_count)
         node_queue = collections.deque(node_queue_dict.values())
         log.info('Resuming with %s nodes in node queue.', len(node_queue))
-        with open(filepath, 'a') as output_file:
+        with JsonGraphOutput(filepath=filepath, mode='a') as output_file:
             print_graphs(self._get_nodes(node_counter, node_queue, queued_nodes, levels, exclude_definition_names),
-                         pretty=False, file=output_file)
+                         (output_file,))
 
 
 class Definition:
@@ -990,6 +1024,7 @@ class Definition:
         self.definition_map = definition_obj['fields']
         self.node_batch_size = definition_obj.get('node_batch_size', DEFAULT_NODE_BATCH_SIZE)
         self.edge_size = definition_obj.get('edge_size', DEFAULT_EDGE_SIZE)
+        self.csv_fields = definition_obj.get('csv_fields')
         default_fields_set = set()
         fields_set = set()
         default_edges_set = set()
@@ -1026,6 +1061,95 @@ class FbException(Exception):
         self.code = error_json['error'].get('code')
         self.subcode = error_json['error'].get('error_subcode')
         self.is_transient = error_json['error'].get('is_transient', False)
+
+
+class JsonGraphOutput:
+    def __init__(self, pretty=False, filepath=None, mode='w'):
+        self.pretty = pretty
+        self.filepath = filepath
+        self.file = open(filepath, mode=mode) if filepath else sys.stdout
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        if self.filepath:
+            self.file.close()
+
+    def output_graph(self, graph):
+        print_graph(graph, pretty=self.pretty, file=self.file)
+
+
+class CsvGraphOutput:
+    def __init__(self, dirpath, fb, mode='w'):
+        self.dirpath = dirpath
+        self.mode = mode
+        self.writer_dict = {}
+        self.files = []
+        self.fb = fb
+        self.fields_dict = {}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        for file in self.files:
+            file.close()
+
+    def output_graph(self, graph):
+        definition_name = graph['metadata']['type']
+        if definition_name not in self.writer_dict:
+            file = open(os.path.join(self.dirpath, '{}.csv'.format(definition_name)), mode=self.mode)
+            self.files.append(file)
+            self.writer_dict[definition_name] = csv.DictWriter(file, extrasaction='ignore',
+                                                               fieldnames=self._get_fieldnames(definition_name))
+            if self.mode != 'a':
+                self.writer_dict[definition_name].writeheader()
+        self.writer_dict[definition_name].writerow(self._get_row(graph, definition_name))
+
+    @staticmethod
+    def _flatten_field_name(field):
+        return '_'.join(field)
+
+    def _get_row(self, graph, definition_name):
+        row = {}
+        for field in self._get_fields(definition_name):
+            field_name = None
+            if isinstance(field, dict):
+                field_name, field = list(field.items())[0]
+            if isinstance(field, list):
+                graph_part = graph
+                for subfield in field:
+                    if graph_part:
+                        graph_part = graph_part.get(subfield)
+                row[field_name or self._flatten_field_name(field)] = self._clean_value(graph_part)
+            else:
+                row[field_name or field] = self._clean_value(graph.get(field))
+        return row
+
+    def _get_fields(self, definition_name):
+        if definition_name not in self.fields_dict:
+            fields = ['id', ['metadata', 'type']]
+            fields.extend(self.fb.get_definition(definition_name).csv_fields)
+            self.fields_dict[definition_name] = fields
+        return self.fields_dict[definition_name]
+
+    def _get_fieldnames(self, definition_name):
+        fieldnames = []
+        for field in self._get_fields(definition_name):
+            if isinstance(field, dict):
+                fieldnames.append(list(field.keys())[0])
+            elif isinstance(field, list):
+                fieldnames.append(self._flatten_field_name(field))
+            else:
+                fieldnames.append(field)
+        return fieldnames
+
+    @staticmethod
+    def _clean_value(value):
+        if isinstance(value, str):
+            return value.replace('\n', ' ')
+        return value
 
 
 if __name__ == '__main__':

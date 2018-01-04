@@ -43,5 +43,17 @@ definition = {
         'universal_video_id': {},
         'updated_time': {'default': True},
         'video_insights': {'omit': True},
-    }
+    },
+    'csv_fields': [
+        'created_time',
+        'updated_time',
+        'title',
+        'description',
+        'permalink_url',
+        ['from', 'id'],
+        ['from', 'name'],
+        'content_category',
+        ['privacy', 'description'],
+        'icon'
+    ]
 }
