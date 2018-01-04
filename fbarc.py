@@ -827,7 +827,7 @@ class Fbarc(object):
         except requests.exceptions.HTTPError as e:
             # Handle (possibly) transient http errors
             logging.error('caught http error %s on %s try', e, try_count)
-            if e.response.status_code in (503, 504):
+            if e.response.status_code in (408, 503, 504):
                 if self.get_errors_limit == try_count:
                     logging.error('received too many errors for %s (%s)', url, params)
                     raise e
@@ -884,7 +884,7 @@ class Fbarc(object):
         except requests.exceptions.HTTPError as e:
             # Handle (possibly) transient http errors
             logging.error('caught http error %s on %s try', e, try_count)
-            if e.response.status_code in (503, 504):
+            if e.response.status_code in (408, 503, 504):
                 if self.get_errors_limit == try_count:
                     logging.error('received too many errors for %s (%s)', url, data)
                     raise e
