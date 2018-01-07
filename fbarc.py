@@ -582,27 +582,36 @@ class Fbarc(object):
                 yield node_ids, pop_definition_name, pop_level
                 node_ids = []
 
-    def get_node(self, node_id, definition_name):
+    def get_node(self, node_id, definition_name, omit_fields_for_error=False):
         """
         Gets a node graph as specified by the node type definition.
         """
-        url, params = self._prepare_node_request(node_id, definition_name)
-        # Using post because querystring might be huge.
-        params['method'] = 'GET'
-        node_graph = self._perform_http_post(url, data=params)
+        try:
+            url, params = self._prepare_node_request(node_id, definition_name,
+                                                     omit_fields_for_error=omit_fields_for_error)
+            # Using post because querystring might be huge.
+            params['method'] = 'GET'
+            node_graph = self._perform_http_post(url, data=params)
 
-        # Queue of pages to retrieve.
-        paging_queue = collections.deque(self.find_paging_links(node_graph))
+            # Queue of pages to retrieve.
+            paging_queue = collections.deque(self.find_paging_links(node_graph))
 
-        # Retrieve pages. Note that additional pages may be appended to queue.
-        while paging_queue:
-            pages = []
-            for _ in range(min(PAGE_BATCH_SIZE, len(paging_queue))):
-                page_link, graph_fragment = paging_queue.popleft()
-                pages.append((page_link, graph_fragment))
-            paging_queue.extend(self.get_page_batch(pages))
+            # Retrieve pages. Note that additional pages may be appended to queue.
+            while paging_queue:
+                pages = []
+                for _ in range(min(PAGE_BATCH_SIZE, len(paging_queue))):
+                    page_link, graph_fragment = paging_queue.popleft()
+                    pages.append((page_link, graph_fragment))
+                paging_queue.extend(self.get_page_batch(pages))
 
-        return node_graph
+            return node_graph
+        except FbException as e:
+            # If permission exception (10), try omitting fields
+            if e.code == 10 and not omit_fields_for_error:
+                log.info('Getting node %s (%s)', node_id, definition_name)
+                return self.get_node(node_id, definition_name, omit_fields_for_error=True)
+            else:
+                raise e
 
     def get_node_batch(self, node_ids, definition_name):
         """
@@ -635,9 +644,10 @@ class Fbarc(object):
                     pages.append((page_link, graph_fragment))
                 paging_queue.extend(self.get_page_batch(pages))
         except FbException as e:
-            # Try one node at a time if too much data exception
-            if e.code == 1:
-                log.warning('Please reduce the amount of data error, so trying one node at a time.')
+            # Try one node at a time if too much data exception (1)
+            # or a does not have permission exception (10)
+            if e.code in (1, 10):
+                log.warning('Please reduce the amount of data error or permission error, so trying one node at a time.')
                 for node_id in node_ids:
                     log.info('Getting node %s (%s)', node_id, definition_name)
                     nodes_graph_dict[node_id] = self.get_node(node_id, definition_name)
@@ -736,7 +746,7 @@ class Fbarc(object):
         """
         return self.get_metadata(node_id)['metadata']['type']
 
-    def _prepare_node_request(self, node_id, definition_name):
+    def _prepare_node_request(self, node_id, definition_name, omit_fields_for_error=False):
         """
         Prepare the request url and params for a single node.
 
@@ -745,7 +755,8 @@ class Fbarc(object):
         params = {
             'metadata': 1,
             'fields': self._prepare_field_param(definition_name, default_only=False,
-                                                omit_fields=self.node_overrides.get(node_id))
+                                                omit_fields=self.node_overrides.get(node_id),
+                                                omit_fields_for_error=omit_fields_for_error)
         }
         return self._prepare_url(node_id), params
 
@@ -769,11 +780,14 @@ class Fbarc(object):
         """
         return "{}/{}".format(GRAPH_URL, node_id)
 
-    def _prepare_field_param(self, definition_name, default_only=True, omit_fields=None):
+    def _prepare_field_param(self, definition_name, default_only=True, omit_fields=None, omit_fields_for_error=False):
         """
         Construct the fields parameter.
         """
         definition = self.get_definition(definition_name)
+        omit_fields = omit_fields or set()
+        if omit_fields_for_error:
+            omit_fields.update(definition.omit_on_error_fields)
         fields = []
         if not default_only:
             fields.append('metadata{type}')
@@ -781,15 +795,15 @@ class Fbarc(object):
         if not default_only:
             fields.extend(definition.fields)
         # Remove omitted fields
-        if omit_fields:
-            for field in omit_fields:
-                if field in fields:
-                    fields.remove(field)
+        for field in omit_fields:
+            if field in fields:
+                fields.remove(field)
+
         edges = list(definition.default_edges)
         if not default_only:
             edges.extend(definition.edges)
         for edge in edges:
-            if omit_fields is None or edge not in omit_fields:
+            if edge not in omit_fields:
                 edge_type = definition.get_edge_type(edge)
                 edge_definition = self.get_definition(edge_type)
                 fields.append(
@@ -1025,6 +1039,7 @@ class Definition:
         self.node_batch_size = definition_obj.get('node_batch_size', DEFAULT_NODE_BATCH_SIZE)
         self.edge_size = definition_obj.get('edge_size', DEFAULT_EDGE_SIZE)
         self.csv_fields = definition_obj.get('csv_fields')
+        self.omit_on_error_fields = set()
         default_fields_set = set()
         fields_set = set()
         default_edges_set = set()
@@ -1041,6 +1056,8 @@ class Definition:
                         default_fields_set.add(name)
                     else:
                         fields_set.add(name)
+                if field_definition.get('omit_on_error'):
+                    self.omit_on_error_fields.add(name)
         self.default_fields = tuple(sorted(default_fields_set))
         self.fields = tuple(sorted(fields_set))
         self.default_edges = tuple(sorted(default_edges_set))
