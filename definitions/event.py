@@ -21,7 +21,8 @@ definition = {
         'is_draft': {'omit': True},
         'is_page_owned': {'omit': True},
         'is_viewer_admin': {'omit': True},
-        'live_videos': {'edge_type': 'livevideo'},
+        # Example: 1958525731052879
+        'live_videos': {'edge_type': 'livevideo', 'omit_on_error': True},
         'maybe': {'omit': True},
         'maybe_count': {},
         'name': {'default': True},

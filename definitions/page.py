@@ -203,7 +203,8 @@ definition = {
         'video_media_copyrights': {'omit': True},
         'videos': {'edge_type': 'video'},
         'videos_you_can_use': {'omit': True},
-        'visitor_posts': {'edge_type': 'post'},
+        # Example: SenatorTedCruz
+        'visitor_posts': {'edge_type': 'post', 'omit_on_error': True},
         'voip_info': {'omit': True},
         'website': {'default': True},
         'were_here_count': {'omit': True},

@@ -165,6 +165,7 @@ Here is an example definition for a Page:
             likes': {'edge_type': 'page', 'follow_edge': False},
             'name': {'default': True},
             'workflows': {'omit': True},
+            'visitor_posts': {'edge_type': 'post', 'omit_on_error': True}
         }
     }
 
@@ -185,6 +186,12 @@ for that edge. That edge will be omitted from recursive retrieval. For example, 
 likes edge is set to not follow edges because this would cause retrieval of all pages that liked
 this page, which is not desired.
 
+Sometimes for inexplicable reasons, the Graph API will report errors for particular fields. For example,
+as of late 2017, requesting the visitor_posts edge on [SenatorTedCruz](https://www.facebook.com/SenatorTedCruz)
+with even a limit of 1 results in a "Please reduce the amount of data you're asking for, then retry your request"
+error. To handle these sorts of errors, setting `omit_on_error` will cause the field to be omitted when certain
+errors are encountered.
+
 `node_batch_size` and `edge_size` are optional; if omitted sensible defaults will be used. Node batch
 size determines how many nodes of that type will be requested at a time. A larger number reduces the
 number of requests to the API, speeding up retrieval. Edge size determines, when retrieving an edge, 
@@ -201,20 +208,6 @@ that are not already included in the definition. The new field or edges will be 
 The [Graph API Explorer](https://developers.facebook.com/tools/explorer) is helpful for understanding
 the fields and connections that are available for a node type. Less helpful is the 
 [Graph API Reference](https://developers.facebook.com/docs/graph-api/reference).
-
-## Graph API flakiness
-Sometimes for inexplicable reasons, the Graph API will report errors for particular fields. For example,
-as of late 2017, requesting the visitor_posts edge on [SenatorTedCruz](https://www.facebook.com/SenatorTedCruz)
-with even a limit of 1 results in a "Please reduce the amount of data you're asking for, then retry your request"
-error.
-
-To handle this, f(b)arc support node overrides. Node overrides allow specifying fields to omit when requesting
-particular nodes. When you encounter an error, the best way to determine which fields to omit is to experiment
-with the Graph API Explorer.
-
-To configure node overrides, create a node overrides JSON configuration file. (See `example.node_overrides.json`
-for an example.) F(b)arc will use `node_overrides.json` by default if found, but a different file can be specified
-with the `--override` flag.
 
 ## F(b)arc Viewer
 F(b)arc Viewer allows you to view and explore the data retrieved from the API.

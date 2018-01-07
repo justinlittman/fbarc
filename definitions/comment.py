@@ -21,6 +21,7 @@ definition = {
         'live_broadcast_timestamp': {'omit': True},
         'message': {'default': True},
         'message_tags': {},
+        # Example: 10151633674272733_30276158
         'object': {'edge_type': 'object', 'follow_edge': False, 'omit_on_error': True},
         'parent': {'edge_type': 'comment'},
         'permalink_url': {'default': True},

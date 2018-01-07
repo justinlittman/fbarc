@@ -183,8 +183,7 @@ def main():
             print('Warning: Using an app token. You may encounter authorization problems.', file=sys.stderr)
         node_id = None
         try:
-            fb = Fbarc(token=token, delay_secs=args.delay,
-                       node_overrides=load_node_overrides(args.override) if hasattr(args, 'override') else None)
+            fb = Fbarc(token=token, delay_secs=args.delay)
             if args.command == 'metadata':
                 if args.update:
                     node_type, fields, connections = fb.get_parsed_metadata(args.node)
@@ -222,23 +221,6 @@ def main():
             elif e.code == 190 and e.subcode == 490:
                 print('Hint: Security check triggered. Log into your Facebook account.')
             quit(1)
-
-
-def load_node_overrides(node_overrides_filepath):
-    node_overrides_dict = {}
-    if os.path.exists(node_overrides_filepath):
-        with open(node_overrides_filepath) as f:
-            node_overrides = json.load(f)
-        for node_ids, fields in node_overrides:
-            if isinstance(node_ids, str):
-                node_ids = (node_ids,)
-            if isinstance(fields, str):
-                fields = (fields,)
-            for node_id in node_ids:
-                node_overrides_dict[node_id] = fields
-    else:
-        log.warning('Node override file %s does not exist.', node_overrides_filepath)
-    return node_overrides_dict
 
 
 def graph_command(definition_name, node_iter, levels, exclude_definition_name, pretty, output_dir, csv_output_dir, fb,
@@ -381,8 +363,6 @@ def get_argparser():
     graph_parser.add_argument('--pretty', action='store_true', help='pretty print output')
     graph_parser.add_argument('--output-dir', help='write output to JSON file in this directory')
     graph_parser.add_argument('--csv-output-dir', help='write output as CSV files in this directory')
-    graph_parser.add_argument('--override', help='config for omitting fields from particular nodes',
-                              default='node_overrides.json')
 
     graphs_parser = subparsers.add_parser('graphs', help='retrieve multiple nodes from the Graph API')
     graphs_parser.add_argument('definition', choices=definition_choices,
@@ -398,8 +378,6 @@ def get_argparser():
     graphs_parser.add_argument('--output-dir', help='write output to JSON files in this directory')
     graphs_parser.add_argument('--csv-output-dir', help='write output as CSV files in this directory')
     graphs_parser.add_argument('--skip', action='store_true', help='skip node if output file exists')
-    graphs_parser.add_argument('--override', help='config for omitting fields from particular nodes',
-                               default='node_overrides.json')
 
     resume_parser = subparsers.add_parser('resume', help='resume retrieving nodes from the Graph API')
     resume_parser.add_argument('file', help='file to resume')
@@ -407,8 +385,6 @@ def get_argparser():
                                help='number of levels of nodes to retrieve (default=1, infinite=0)')
     resume_parser.add_argument('--exclude', nargs='+', choices=list(definition_importers.keys()),
                                help='node type definitions to exclude from recursive retrieval', default=[])
-    resume_parser.add_argument('--override', help='config for omitting fields from particular nodes',
-                               default='node_overrides.json')
 
     metadata_parser = subparsers.add_parser('metadata', help='retrieve metadata for a node from the Graph API')
     metadata_parser.add_argument('node', help='identify node to retrieve by providing node id, username, or Facebook '
@@ -480,7 +456,7 @@ def raise_for_fb_exception(response, data=None, params=None):
 
 
 class Fbarc(object):
-    def __init__(self, token=None, delay_secs=.5, node_overrides=None):
+    def __init__(self, token=None, delay_secs=.5):
         log.debug('Token is %s', token)
         self.token = token
 
@@ -490,11 +466,9 @@ class Fbarc(object):
         self.last_get = None
         log.debug('Delay is %s', delay_secs)
         self.delay_secs = delay_secs
+        self.get_too_much_data_errors_limit = 4
         self.get_errors_limit = 10
         self.get_error_delay_secs = 30
-
-        self.node_overrides = node_overrides or dict()
-        log.debug('Node overrides are %s', self.node_overrides)
 
     def generate_url(self, node_id, definition_name, escape=False):
         """
@@ -575,10 +549,8 @@ class Fbarc(object):
             peak_level = None
             if node_queue:
                 peak_node_id, peak_definition_name, peak_level = node_queue[0]
-            # Checking if this or next node in node overrides. This forces nodes with overrides to be in own batch.
             if peak_definition_name != pop_definition_name or peak_level != pop_level or len(
-                    node_ids) == pop_definition.node_batch_size \
-                    or pop_node_id in self.node_overrides or peak_node_id in self.node_overrides:
+                    node_ids) == pop_definition.node_batch_size:
                 yield node_ids, pop_definition_name, pop_level
                 node_ids = []
 
@@ -606,9 +578,9 @@ class Fbarc(object):
 
             return node_graph
         except FbException as e:
-            # If permission exception (10), try omitting fields
-            if e.code == 10 and not omit_fields_for_error:
-                log.info('Getting node %s (%s)', node_id, definition_name)
+            # If too much data exception (1) or permission exception (10), try omitting fields
+            if e.code in (1,10) and not omit_fields_for_error:
+                log.info('Getting node %s (%s), omitting fields for error', node_id, definition_name)
                 return self.get_node(node_id, definition_name, omit_fields_for_error=True)
             else:
                 raise e
@@ -755,7 +727,6 @@ class Fbarc(object):
         params = {
             'metadata': 1,
             'fields': self._prepare_field_param(definition_name, default_only=False,
-                                                omit_fields=self.node_overrides.get(node_id),
                                                 omit_fields_for_error=omit_fields_for_error)
         }
         return self._prepare_url(node_id), params
@@ -780,14 +751,14 @@ class Fbarc(object):
         """
         return "{}/{}".format(GRAPH_URL, node_id)
 
-    def _prepare_field_param(self, definition_name, default_only=True, omit_fields=None, omit_fields_for_error=False):
+    def _prepare_field_param(self, definition_name, default_only=True, omit_fields_for_error=False):
         """
         Construct the fields parameter.
         """
         definition = self.get_definition(definition_name)
-        omit_fields = omit_fields or set()
+        omit_fields = set()
         if omit_fields_for_error:
-            omit_fields.update(definition.omit_on_error_fields)
+            omit_fields = definition.omit_on_error_fields
         fields = []
         if not default_only:
             fields.append('metadata{type}')
@@ -889,10 +860,13 @@ class Fbarc(object):
         except FbException as e:
             # Handle transient facebook errors and unexpected GraphMethodException: Unsupported get request.
             # Seem that this GraphMethodException may be transient.
-            # Also too much data requested is also transient.
+            # Also too much data requested is sometimes transient (1).
             if e.is_transient or (e.code == 100 and e.subcode == 33) or e.code == 1:
                 logging.error('caught facebook error %s on %s try', e, try_count)
-                if self.get_errors_limit == try_count:
+                if e.code == 1 and self.get_too_much_data_errors_limit == try_count:
+                    logging.error('received too many too much data errors')
+                    raise e
+                elif self.get_errors_limit == try_count:
                     logging.error('received too many errors')
                     raise e
                 else:
@@ -949,7 +923,10 @@ class Fbarc(object):
             # Also too much data requested is also transient.
             if e.is_transient or (e.code == 100 and e.subcode == 33) or e.code == 1:
                 logging.error('caught facebook error %s on %s try', e, try_count)
-                if self.get_errors_limit == try_count:
+                if e.code == 1 and self.get_too_much_data_errors_limit == try_count:
+                    logging.error('received too many too much data errors')
+                    raise e
+                elif self.get_errors_limit == try_count:
                     logging.error('received too many errors for %s (%s)', url, data)
                     raise e
                 else:
