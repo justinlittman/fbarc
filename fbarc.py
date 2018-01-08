@@ -590,6 +590,7 @@ class Fbarc(object):
         """
         Gets a node graphs for a list of nodes as specified by the node type definition.
         """
+        definition = self.get_definition(definition_name)
         nodes_graph_dict = dict()
         try:
             url, params = self._prepare_nodes_request(node_ids, definition_name)
@@ -607,8 +608,6 @@ class Fbarc(object):
                 else:
                     log.warning('Node %s is missing or not permitted, so skipping.', node_id)
 
-            definition = self.get_definition(definition_name)
-
             # Retrieve pages. Note that additional pages may be appended to queue.
             while paging_queue:
                 pages = []
@@ -618,9 +617,9 @@ class Fbarc(object):
                 paging_queue.extend(self.get_page_batch(pages))
         except FbException as e:
             # Try one node at a time if too much data exception (1)
-            # or a does not have permission exception (10)
-            if e.code in (1, 10):
-                log.warning('Please reduce the amount of data error or permission error, so trying one node at a time.')
+            # or other error with an omittable error code.
+            if e.code == 1 or e.code in definition.omit_on_error_fields_by_error_code:
+                log.warning('Please reduce the amount of data error or other error, so trying one node at a time.')
                 for node_id in node_ids:
                     log.info('Getting node %s (%s)', node_id, definition_name)
                     nodes_graph_dict[node_id] = self.get_node(node_id, definition_name)
