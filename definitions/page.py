@@ -204,7 +204,7 @@ definition = {
         'videos': {'edge_type': 'video'},
         'videos_you_can_use': {'omit': True},
         # Example: SenatorTedCruz
-        'visitor_posts': {'edge_type': 'post', 'omit_on_error': True},
+        'visitor_posts': {'edge_type': 'post', 'omit_on_error': 1},
         'voip_info': {'omit': True},
         'website': {'default': True},
         'were_here_count': {'omit': True},

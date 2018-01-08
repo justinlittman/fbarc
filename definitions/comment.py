@@ -4,7 +4,7 @@ definition = {
     'fields': {
         'admin_creator': {'omit': True},
         'application': {'omit': True},
-        'attachment': {'omit': True},
+        'attachment': {},
         'can_comment': {'omit': True},
         'can_hide': {'omit': True},
         'can_like': {'omit': True},
@@ -22,7 +22,7 @@ definition = {
         'message': {'default': True},
         'message_tags': {},
         # Example: 10151633674272733_30276158
-        'object': {'edge_type': 'object', 'follow_edge': False, 'omit_on_error': True},
+        'object': {'edge_type': 'object', 'follow_edge': False, 'omit_on_error': 10},
         'parent': {'edge_type': 'comment'},
         'permalink_url': {'default': True},
         'private_reply_conversation': {'omit': True},

@@ -165,7 +165,7 @@ Here is an example definition for a Page:
             likes': {'edge_type': 'page', 'follow_edge': False},
             'name': {'default': True},
             'workflows': {'omit': True},
-            'visitor_posts': {'edge_type': 'post', 'omit_on_error': True}
+            'visitor_posts': {'edge_type': 'post', 'omit_on_error': 10}
         }
     }
 
@@ -189,8 +189,8 @@ this page, which is not desired.
 Sometimes for inexplicable reasons, the Graph API will report errors for particular fields. For example,
 as of late 2017, requesting the visitor_posts edge on [SenatorTedCruz](https://www.facebook.com/SenatorTedCruz)
 with even a limit of 1 results in a "Please reduce the amount of data you're asking for, then retry your request"
-error. To handle these sorts of errors, setting `omit_on_error` will cause the field to be omitted when certain
-errors are encountered.
+error. To handle these sorts of errors, setting `omit_on_error` will cause the field to be omitted when the specified
+error is encountered. (Errors are identified using Facebook error codes.)
 
 `node_batch_size` and `edge_size` are optional; if omitted sensible defaults will be used. Node batch
 size determines how many nodes of that type will be requested at a time. A larger number reduces the

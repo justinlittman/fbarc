@@ -578,10 +578,11 @@ class Fbarc(object):
 
             return node_graph
         except FbException as e:
-            # If too much data exception (1) or permission exception (10), try omitting fields
-            if e.code in (1,10) and not omit_fields_for_error:
-                log.info('Getting node %s (%s), omitting fields for error', node_id, definition_name)
-                return self.get_node(node_id, definition_name, omit_fields_for_error=True)
+            # Try omitting fields
+            definition = self.get_definition(definition_name)
+            if e.code in definition.omit_on_error_fields_by_error_code and not omit_fields_for_error:
+                log.info('Getting node %s (%s), omitting fields for error %s', node_id, definition_name, e.code)
+                return self.get_node(node_id, definition_name, omit_fields_for_error=e.code)
             else:
                 raise e
 
@@ -756,9 +757,8 @@ class Fbarc(object):
         Construct the fields parameter.
         """
         definition = self.get_definition(definition_name)
-        omit_fields = set()
-        if omit_fields_for_error:
-            omit_fields = definition.omit_on_error_fields
+        # Get omitted fields, if any
+        omit_fields = definition.omit_on_error_fields_by_error_code.get(omit_fields_for_error, [])
         fields = []
         if not default_only:
             fields.append('metadata{type}')
@@ -1016,7 +1016,7 @@ class Definition:
         self.node_batch_size = definition_obj.get('node_batch_size', DEFAULT_NODE_BATCH_SIZE)
         self.edge_size = definition_obj.get('edge_size', DEFAULT_EDGE_SIZE)
         self.csv_fields = definition_obj.get('csv_fields')
-        self.omit_on_error_fields = set()
+        self.omit_on_error_fields_by_error_code = dict()
         default_fields_set = set()
         fields_set = set()
         default_edges_set = set()
@@ -1033,8 +1033,11 @@ class Definition:
                         default_fields_set.add(name)
                     else:
                         fields_set.add(name)
-                if field_definition.get('omit_on_error'):
-                    self.omit_on_error_fields.add(name)
+                omit_on_error_code = field_definition.get('omit_on_error')
+                if omit_on_error_code:
+                    if omit_on_error_code not in self.omit_on_error_fields_by_error_code:
+                        self.omit_on_error_fields_by_error_code[omit_on_error_code] = set()
+                    self.omit_on_error_fields_by_error_code[omit_on_error_code].add(name)
         self.default_fields = tuple(sorted(default_fields_set))
         self.fields = tuple(sorted(fields_set))
         self.default_edges = tuple(sorted(default_edges_set))
