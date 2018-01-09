@@ -6,11 +6,11 @@ definition = {
         'admin_creator': {'omit': True},
         'allowed_advertising_objectives': {'omit': True},
         'application': {'omit': True},
-        'attachments': {},
-        'backdated_time': {'omit': True},
-        'call_to_action': {'omit': True},
         # Example: 36872302227_355133217967789
         # Applies to caption and all others with omit_on_error for 1.
+        'attachments': {'omit': True},
+        'backdated_time': {'omit': True},
+        'call_to_action': {'omit': True},
         'caption': {'omit_on_error': 1},
         'child_attachments': {'omit': True},
         'comments': {'edge_type': 'comment'},
