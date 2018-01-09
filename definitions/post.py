@@ -9,26 +9,24 @@ definition = {
         'attachments': {},
         'backdated_time': {'omit': True},
         'call_to_action': {'omit': True},
-        # Removed since causes error
-        'caption': {},
+        # Example: 36872302227_355133217967789
+        # Applies to caption and all others with omit_on_error for 1.
+        'caption': {'omit_on_error': 1},
         'child_attachments': {'omit': True},
         'comments': {'edge_type': 'comment'},
         'comments_mirroring_domain': {'omit': True},
         'coordinates': {'omit': True},
         'created_time': {'default': True},
-        # Removed since causes error
-        'description': {},
+        'description': {'omit_on_error': 1},
         'dynamic_posts': {'omit': True},
         'event': {'edge_type': 'event', 'follow_edge': False},
         'expanded_height': {'omit': True},
         'expanded_width': {'omit': True},
         'feed_targeting': {'omit': True},
         'from': {'default': True},
-        # Removed since causes error
-        'full_picture': {},
+        'full_picture': {'omit_on_error': 1},
         'height': {'omit': True},
-        # Removed since causes error
-        'icon': {},
+        'icon': {'omit_on_error': 1},
         'insights': {'omit': True},
         'instagram_eligibility': {'omit': True},
         'is_app_share': {'omit': True},
@@ -39,34 +37,27 @@ definition = {
         'is_published': {'omit': True},
         'is_spherical': {'omit': True},
         'likes': {},
-        # Removed since causes error
-        'link': {},
+        'link': {'omit_on_error': 1},
         'message': {'default': True},
         'message_tags': {},
         'multi_share_end_card': {'omit': True},
         'multi_share_optimized': {'omit': True},
-        # Removed since causes error
-        'name': {},
-        # Removed since causes error
-        'object_id': {},
-        # Removed since causes error
+        'name': {'omit_on_error': 1},
+        'object_id': {'omit_on_error': 1},
         'parent_id': {},
         'permalink_url': {'default': True},
-        # Removed since causes error
-        'picture': {},
+        'picture': {'omit_on_error': 1},
         'place': {},
         'privacy': {'omit': True},
         'promotion_status': {'omit': True},
-        # Removed since causes error
-        'properties': {},
+        'properties': {'omit_on_error': 1},
         'reactions': {},
         'scheduled_publish_time': {'omit': True},
         'seen': {'omit': True},
         'sharedposts': {'omit': True},
         # Causes (#2) Service temporarily unavailable on some posts, e.g., 7935122852_217836351604866
         'shares': {'omit_on_error': 2},
-        # Removed since causes error
-        'source': {},
+        'source': {'omit_on_error': 1},
         'sponsor_tags': {'omit': True},
         'status_type': {'default': True},
         'story': {},
@@ -76,8 +67,7 @@ definition = {
         'targeting': {'omit': True},
         'timeline_visibility': {'omit': True},
         'to': {'default': True},
-        # Removed since causes error
-        'type': {},
+        'type': {'omit_on_error': 1},
         'updated_time': {'default': True},
         'via': {},
         'video_buying_eligibility': {'omit': True},
