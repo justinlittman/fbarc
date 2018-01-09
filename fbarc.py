@@ -243,7 +243,7 @@ def graph_command(definition_name, node_iter, levels, exclude_definition_name, p
                     output_filepath = os.path.join(output_dir, '{}.jsonl'.format(node_id))
                     if skip and os.path.exists(output_filepath):
                         log.info('Skipping %s', node_id)
-                        return
+                        continue
                     os.makedirs(output_dir, exist_ok=True)
                     graph_outputs.append(
                         json_output_stack.enter_context(JsonGraphOutput(pretty=pretty, filepath=output_filepath)))
@@ -254,26 +254,6 @@ def graph_command(definition_name, node_iter, levels, exclude_definition_name, p
                 print_graphs(fb.get_nodes(node_id, definition_name, levels=levels,
                                           exclude_definition_names=exclude_definition_name), graph_outputs)
                 graph_outputs.pop()
-
-    # with contextlib.ExitStack() as output_stack:
-    #     graph_outputs = []
-    #     if output_dir:
-    #         output_filepath = os.path.join(output_dir, '{}.jsonl'.format(node_id))
-    #         if skip and os.path.exists(output_filepath):
-    #             log.info('Skipping %s', node_id)
-    #             return
-    #         os.makedirs(output_dir, exist_ok=True)
-    #         graph_outputs.append(output_stack.enter_context(JsonGraphOutput(pretty=pretty, filepath=output_filepath)))
-    #     else:
-    #         graph_outputs.append(output_stack.enter_context(JsonGraphOutput(pretty=pretty)))
-    #
-    #     if csv_output_dir:
-    #         os.makedirs(csv_output_dir, exist_ok=True)
-    #         graph_outputs.append(output_stack.enter_context(CsvGraphOutput(csv_output_dir, fb)))
-    #
-    #     print('Getting graph for node {}'.format(node_id), file=sys.stderr)
-    #     print_graphs(fb.get_nodes(node_id, definition_name, levels=levels,
-    #                               exclude_definition_names=exclude_definition_name), graph_outputs)
 
 
 def print_graphs(graph_iter, graph_outputs):
