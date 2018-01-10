@@ -4,7 +4,8 @@ definition = {
     'fields': {
         'admin_creator': {'omit': True},
         'application': {'omit': True},
-        'attachment': {},
+        # Example: 10152641184872228_10152641800227228
+        'attachment': {'omit_on_error': 1},
         'can_comment': {'omit': True},
         'can_hide': {'omit': True},
         'can_like': {'omit': True},
