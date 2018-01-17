@@ -127,6 +127,11 @@ Note that f(b)arc may need to make multiple requests to retrieve the entire node
 graph command may take some time.
 
     python fbarc.py graph page 1191441824276882 --levels 2 --pretty
+    
+To write the output to a file, use `--output-dir` or redirect output to a file with `> <filename>.jsonl`.
+
+    python fbarc.py graph page 1191441824276882 --levels 2 --pretty > 1191441824276882.jsonl
+
 
 ### Metadata
 The metadata command will retrieve all of the fields and connections for a node.
