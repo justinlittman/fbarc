@@ -77,7 +77,7 @@ def freeze(json_filepath, output_dir):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser("fbarc")
+    parser = argparse.ArgumentParser("fbarc_viewer_freeze")
     parser.add_argument('output_dir', help='Where to write the static files.')
     parser.add_argument('facebook_json', nargs='+', help='File(s) containing the Facebook JSON created by f(b)arc.')
 
