@@ -217,33 +217,14 @@ the fields and connections that are available for a node type. Less helpful is t
 ## F(b)arc Viewer
 F(b)arc Viewer allows you to view and explore the data retrieved from the API.
 
-There are two approaches for invoking:
-
-    python fbarc_viewer.py <filepath(s) of file containing JSON>
-
-or:
-
-    export FLASK_APP=fbarc_viewer.py
-    flask run
-    
-A handy shortcut to load data directly from `fbarch.py` is:
-
-    python fbarc.py graph page TestyMcTestpage | python fbarc_viewer.py
-
-Once F(b)arc Viewer is running, it will be available at [http://localhost:5000/](http://localhost:5000/).
-
-### Freezing F(b)arc Viewer
-Freezing will write static files from F(b)arc Viewer. These can be deployed to a web server
-so that F(b)arc Viewer does not need to be kept running.
-
 To run:
 
-    python fbarc_viewer_freeze.py <output dir> <filepaths to JSONL files from f(b)arc
-    
-For example:
+    python fbarc_viewer.py <filepath(s) of file containing JSON or directories containing JSON files>
 
-    python fbarc_viewer_freeze.py /var/www/html TestMcTestpage.jsonl
+Adding `--index` will cause indexes to be used. Indexes will reduce the amount of memory required. If indexes 
+don't already exist, they will be created:
 
+Once F(b)arc Viewer is running, it will be available at [http://localhost:5000/](http://localhost:5000/).
 
 ## Unit tests
 

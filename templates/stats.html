@@ -12,7 +12,7 @@
                 {% for node_type, count in stats.most_common() %}
                     <tr>
                         <td>{{ node_type }}</td>
-                        <td>{{ count }}</td>
+                        <td>{{ count | nf }}</td>
                     </tr>
                 {% endfor %}
             </tbody>

@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block body %}
+    <div class="container">
+      <p class="text-right"><a href="{{ url_for('total_stats') }}">stats</a></p>
+    </div>
+    <div class="container">
+        <ul>
+            {% for root_node, first_node in first_nodes|dictsort %}
+            <li><a href="{{ url_for('node', root_node=root_node, node_id=first_node) }}">{{ root_node }}</a></li>
+            {% endfor %}
+        </ul>
+    </div>
+{% endblock %}

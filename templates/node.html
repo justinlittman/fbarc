@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block body %}
     <div class="container">
-      <p class="text-right"><a href="{{ url_for('json_node', node_id=node_id) }}">JSON</a> | <a href="{{ url_for('stats') }}">stats</a></p>
+      <p class="text-right"><a href="{% if not field %}{{ url_for('json_node', root_node=root_node, node_id=node_id) }}{% else %}{{ url_for('json_node_field', root_node=root_node, node_id=node_id, field=field) }}{% endif %}">JSON</a> | <a href="{{ url_for('stats', root_node=root_node) }}">stats</a></p>
     </div>
     <div class="container">
         {% for line in node_lines %}
