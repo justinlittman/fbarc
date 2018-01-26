@@ -317,26 +317,23 @@ class Stat(Base):
         return 'Stat<node_type={}, count={}>'.format(self.node_type, self.count)
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser("fbarc_viewer")
-    parser.add_argument('--index', action='store_true', help='use/create indexes for files')
-    parser.add_argument('files', metavar='FILE', nargs='+', help='files or directories to read')
-
-    args = parser.parse_args()
+def init(files, index=False):
+    global use_index, nodes, first_nodes, stats_counters, total_stats_counter, filepaths, dbs
 
     load_filepaths = []
-    for file_or_dirpath in args.files:
+    for file_or_dirpath in files:
         if os.path.isfile(file_or_dirpath):
             load_filepaths.append(file_or_dirpath)
         else:
             for dirpath, _, filenames in os.walk(file_or_dirpath):
                 for filename in filenames:
-                    load_filepaths.append(os.path.join(dirpath, filename))
+                    if filename.lower().endswith('.json') or filename.lower().endswith('.jsonl'):
+                        load_filepaths.append(os.path.join(dirpath, filename))
 
     for filepath in load_filepaths:
         root_node = get_root_node(filepath)
         filepaths[root_node] = filepath
-        if not args.index:
+        if not index:
             print('Loading {}'.format(filepath))
             load_first_node, load_nodes, load_stats_counter = load_json(filepath)
             first_nodes[root_node] = load_first_node
@@ -374,5 +371,19 @@ if __name__ == '__main__':
                         load_stats_counter[stat.node_type] = stat.count
                         total_stats_counter[stat.node_type] += stat.count
                     stats_counters[root_node] = load_stats_counter
+
+
+if 'FBARC_FILES' in os.environ:
+    init(os.environ.get('FBARC_FILES').split(','), os.environ.get('FBARC_INDEX', 'false').lower() == 'true')
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser("fbarc_viewer")
+    parser.add_argument('--index', action='store_true', help='use/create indexes for files')
+    parser.add_argument('files', metavar='FILE', nargs='+', help='files or directories to read')
+
+    args = parser.parse_args()
+
+    init(args.files, args.index)
 
     app.run()

@@ -2,4 +2,4 @@ requests
 mock
 iso8601
 flask
-Frozen-Flask
+sqlalchemy
