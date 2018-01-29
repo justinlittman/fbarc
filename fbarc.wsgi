@@ -8,6 +8,7 @@ import sys
 sys.path.insert(0, '/opt/fbarc')
 
 # Configure fbarc
+import os
 os.environ['FBARC_INDEX']='true'
 os.environ['FBARC_FILES']='/path/to/file1.jsonl,/path/to/dir'
 

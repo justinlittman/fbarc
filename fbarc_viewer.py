@@ -179,7 +179,7 @@ def render_dict(dict_obj, counter, root_node, node_id):
         if isinstance(value, list):
             yield '<span class="badge badge-info">{}</span>'.format(len(value))
         if key == 'id' and has_node(root_node, value):
-            yield '<a href="{}">{}</a>'.format(url_for('node', root_node=root_node, node_id=node_id), value)
+            yield '<a href="{}">{}</a>'.format(url_for('node', root_node=root_node, node_id=value), value)
         else:
             if collapsible:
                 yield '<div class="collapse" id="{}">'.format(item_id)
@@ -222,7 +222,7 @@ def get_node(root_node, node_id):
             if node:
                 pos = node.offset
     if pos is not None:
-        with open(filepaths[root_node], encoding='utf-8') as file:
+        with open(filepaths[root_node]) as file:
             file.seek(pos)
             return json.loads(file.readline())
     return None
